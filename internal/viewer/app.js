@@ -18,12 +18,21 @@ let lastPing = 0;
 let sessionGone = false;
 
 function goLoginTimeout() {
+  endViewerSession("timeout");
+}
+
+function goLoginRestart() {
+  endViewerSession("restart");
+}
+
+function endViewerSession(reason) {
   if (sessionGone) return;
   sessionGone = true;
-  sessionStorage.setItem("lv_timeout", "1");
+  if (reason === "restart") sessionStorage.setItem("lv_restart", "1");
+  else sessionStorage.setItem("lv_timeout", "1");
   stopLogs();
   fetch("/api/logout", { method: "POST" }).finally(() => {
-    location.href = "/login?reason=timeout";
+    location.href = "/login?reason=" + encodeURIComponent(reason === "restart" ? "restart" : "timeout");
   });
 }
 
@@ -41,7 +50,8 @@ function bumpActivity() {
       }
       try {
         const me = await res.json();
-        if (me && me.error === "session_timeout") goLoginTimeout();
+        if (me && me.error === "session_restarted") goLoginRestart();
+        else if (me && me.error === "session_timeout") goLoginTimeout();
       } catch (_) {}
     }).catch(() => {});
   }
@@ -83,12 +93,14 @@ function closeAbout() {
 async function api(path) {
   const res = await fetch(path);
   if (res.status === 401) {
-    let timedOut = false;
+    let reason = "auth";
     try {
       const body = await res.clone().json();
-      timedOut = body && body.error === "session_timeout";
+      if (body && body.error === "session_restarted") reason = "restart";
+      else if (body && body.error === "session_timeout") reason = "timeout";
     } catch (_) {}
-    if (timedOut) goLoginTimeout();
+    if (reason === "restart") goLoginRestart();
+    else if (reason === "timeout") goLoginTimeout();
     else location.href = "/login";
     throw new Error("auth");
   }

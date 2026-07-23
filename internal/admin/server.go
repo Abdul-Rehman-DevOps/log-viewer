@@ -55,10 +55,12 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		if st == auth.StatusExpired {
-			log.Printf("admin session timeout path=%s", r.URL.Path)
+		if st == auth.StatusExpired || st == auth.StatusRestarted {
+			log.Printf("admin session %s path=%s", map[auth.Status]string{
+				auth.StatusExpired: "timeout", auth.StatusRestarted: "restarted",
+			}[st], r.URL.Path)
 			auth.ClearCookie(w, auth.AdminCookie)
-			auth.WriteUnauthorized(w, auth.StatusExpired)
+			auth.WriteUnauthorized(w, st)
 			return
 		}
 		// legacy bearer = raw password (compat)

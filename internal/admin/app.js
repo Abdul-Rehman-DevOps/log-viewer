@@ -18,20 +18,37 @@ let sessionGone = false;
 function showLogin(reason) {
   $("login").classList.remove("hidden");
   $("shell").classList.add("hidden");
-  if (reason === "timeout" || sessionStorage.getItem("lv_admin_timeout") === "1") {
-    $("loginStatus").textContent = "Session timed out due to inactivity. Please sign in again.";
+  if ($("btnLogout")) $("btnLogout").classList.add("hidden");
+  const msg = {
+    timeout: "Session timed out due to inactivity. Please sign in again.",
+    restart: "Session ended because Log Viewer restarted. Please sign in again."
+  };
+  const key = reason || (sessionStorage.getItem("lv_admin_timeout") === "1" ? "timeout"
+    : sessionStorage.getItem("lv_admin_restart") === "1" ? "restart" : "");
+  if (key && msg[key]) {
+    $("loginStatus").textContent = msg[key];
     $("loginStatus").className = "status err";
     sessionStorage.removeItem("lv_admin_timeout");
+    sessionStorage.removeItem("lv_admin_restart");
   }
 }
 
 function goAdminTimeout() {
+  endAdminSession("timeout");
+}
+
+function goAdminRestart() {
+  endAdminSession("restart");
+}
+
+function endAdminSession(reason) {
   if (sessionGone) return;
   sessionGone = true;
-  sessionStorage.setItem("lv_admin_timeout", "1");
+  if (reason === "restart") sessionStorage.setItem("lv_admin_restart", "1");
+  else sessionStorage.setItem("lv_admin_timeout", "1");
   clearTimeout(idleTimer);
   fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" }).finally(() => {
-    showLogin("timeout");
+    showLogin(reason);
     sessionGone = false;
   });
 }
@@ -46,7 +63,8 @@ function bumpActivity() {
     fetch("/api/admin/namespaces", { credentials: "same-origin" }).then((res) => {
       if (res.status === 401) {
         res.json().then((body) => {
-          if (body && body.error === "session_timeout") goAdminTimeout();
+          if (body && body.error === "session_restarted") goAdminRestart();
+          else if (body && body.error === "session_timeout") goAdminTimeout();
           else showLogin();
         }).catch(() => showLogin());
       }
@@ -76,7 +94,8 @@ async function api(path, opts = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
   if (res.status === 401) {
-    if (data && data.error === "session_timeout") goAdminTimeout();
+    if (data && data.error === "session_restarted") goAdminRestart();
+    else if (data && data.error === "session_timeout") goAdminTimeout();
     else showLogin();
     throw new Error((data && data.message) || "unauthorized");
   }
@@ -88,6 +107,7 @@ async function api(path, opts = {}) {
 function showPanel() {
   $("login").classList.add("hidden");
   $("shell").classList.remove("hidden");
+  if ($("btnLogout")) $("btnLogout").classList.remove("hidden");
   sessionGone = false;
   bumpActivity();
 }
@@ -321,12 +341,26 @@ document.querySelectorAll("nav .nav").forEach((btn) => {
 
 $("btnLogin").onclick = async () => {
   try {
+    $("loginStatus").textContent = "";
+    $("loginStatus").className = "status";
     await api("/api/admin/login", { method: "POST", body: JSON.stringify({ password: $("password").value }) });
     await load();
   } catch (e) {
     $("loginStatus").textContent = e.message;
     $("loginStatus").className = "status err";
   }
+};
+$("btnLogout").onclick = async () => {
+  clearTimeout(idleTimer);
+  sessionGone = true;
+  try {
+    await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" });
+  } catch (_) {}
+  $("password").value = "";
+  $("loginStatus").textContent = "";
+  $("loginStatus").className = "status";
+  showLogin();
+  sessionGone = false;
 };
 $("password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnLogin").click(); });
 $("btnAddUser").onclick = () => { users.push({ username: "", enabled: true, password: "" }); renderUsers(); updateStats(); };

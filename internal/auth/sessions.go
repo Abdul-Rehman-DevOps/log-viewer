@@ -2,13 +2,17 @@ package auth
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +27,8 @@ type Session struct {
 	Username string `json:"u"`
 	Role     string `json:"r"` // admin | user
 	Exp      int64  `json:"e"`
+	// Gen binds the cookie to the current process/restart epoch.
+	Gen string `json:"g,omitempty"`
 }
 
 type Status int
@@ -32,13 +38,21 @@ const (
 	StatusOK
 	StatusExpired
 	StatusInvalid
+	StatusRestarted // server restarted — cookie gen no longer matches
 )
 
 type Sessions struct {
-	secret []byte
+	secret  []byte
+	dataDir string
+
+	mu   sync.RWMutex
+	gen  string
 }
 
-func NewSessions() *Sessions {
+// NewSessions creates a session manager and rotates the restart epoch so existing
+// cookies become invalid after a process restart. When dataDir is set, the epoch
+// is written to session.epoch (shared across replicas on the same volume).
+func NewSessions(dataDir string) *Sessions {
 	sec := os.Getenv("LOG_VIEWER_SESSION_SECRET")
 	if sec == "" {
 		sec = os.Getenv("LOG_VIEWER_ADMIN_PASSWORD")
@@ -46,7 +60,45 @@ func NewSessions() *Sessions {
 	if sec == "" {
 		sec = "log-viewer-dev-session-secret"
 	}
-	return &Sessions{secret: []byte(sec)}
+	s := &Sessions{secret: []byte(sec), dataDir: dataDir}
+	s.rotateEpoch()
+	return s
+}
+
+func (s *Sessions) rotateEpoch() {
+	gen := newEpoch()
+	s.mu.Lock()
+	s.gen = gen
+	s.mu.Unlock()
+	if s.dataDir != "" {
+		_ = os.MkdirAll(s.dataDir, 0o755)
+		_ = os.WriteFile(s.epochPath(), []byte(gen+"\n"), 0o600)
+	}
+}
+
+func (s *Sessions) epochPath() string {
+	return filepath.Join(s.dataDir, "session.epoch")
+}
+
+func newEpoch() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return hex.EncodeToString(b[:])
+}
+
+func (s *Sessions) currentGen() string {
+	if s.dataDir != "" {
+		if raw, err := os.ReadFile(s.epochPath()); err == nil {
+			if g := strings.TrimSpace(string(raw)); g != "" {
+				return g
+			}
+		}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.gen
 }
 
 func (s *Sessions) Create(username, role string, ttl time.Duration) (string, error) {
@@ -57,11 +109,12 @@ func (s *Sessions) Create(username, role string, ttl time.Duration) (string, err
 		Username: username,
 		Role:     role,
 		Exp:      time.Now().Add(ttl).Unix(),
+		Gen:      s.currentGen(),
 	}
 	return s.sign(sess)
 }
 
-// Touch issues a new token with a fresh sliding expiry.
+// Touch issues a new token with a fresh sliding expiry (same restart gen).
 func (s *Sessions) Touch(sess Session) (string, error) {
 	return s.Create(sess.Username, sess.Role, SessionTTL)
 }
@@ -78,6 +131,9 @@ func (s *Sessions) Lookup(id string) (Session, Status) {
 	sess, err := s.verify(id)
 	if err != nil {
 		return Session{}, StatusInvalid
+	}
+	if sess.Gen == "" || sess.Gen != s.currentGen() {
+		return sess, StatusRestarted
 	}
 	if time.Now().Unix() > sess.Exp {
 		return sess, StatusExpired
@@ -165,8 +221,11 @@ func WriteUnauthorized(w http.ResponseWriter, status Status) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 	msg := `{"error":"unauthorized"}`
-	if status == StatusExpired {
+	switch status {
+	case StatusExpired:
 		msg = `{"error":"session_timeout","message":"Session timed out due to inactivity. Please sign in again."}`
+	case StatusRestarted:
+		msg = `{"error":"session_restarted","message":"Session ended because Log Viewer restarted. Please sign in again."}`
 	}
 	_, _ = w.Write([]byte(msg))
 }

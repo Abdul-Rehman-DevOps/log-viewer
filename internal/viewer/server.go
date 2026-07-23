@@ -42,8 +42,8 @@ func (s *Server) requireUser(next http.HandlerFunc) http.HandlerFunc {
 		id := auth.CookieValue(r, auth.UserCookie)
 		sess, st := s.Sessions.Lookup(id)
 		if st != auth.StatusOK {
-			if st == auth.StatusExpired {
-				log.Printf("viewer session timeout user=%s path=%s", sess.Username, r.URL.Path)
+			if st == auth.StatusExpired || st == auth.StatusRestarted {
+				log.Printf("viewer session %s user=%s path=%s", statusName(st), sess.Username, r.URL.Path)
 				auth.ClearCookie(w, auth.UserCookie)
 			}
 			auth.WriteUnauthorized(w, st)
@@ -66,10 +66,14 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	id := auth.CookieValue(r, auth.UserCookie)
 	sess, st := s.Sessions.Lookup(id)
 	if st != auth.StatusOK {
-		if st == auth.StatusExpired {
-			log.Printf("viewer session timeout (page) user=%s", sess.Username)
+		if st == auth.StatusExpired || st == auth.StatusRestarted {
+			log.Printf("viewer session %s (page) user=%s", statusName(st), sess.Username)
 			auth.ClearCookie(w, auth.UserCookie)
-			http.Redirect(w, r, "/login?reason=timeout", http.StatusFound)
+			reason := "timeout"
+			if st == auth.StatusRestarted {
+				reason = "restart"
+			}
+			http.Redirect(w, r, "/login?reason="+reason, http.StatusFound)
 			return
 		}
 		http.Redirect(w, r, "/login", http.StatusFound)
@@ -157,6 +161,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		} else if st == auth.StatusExpired {
 			auth.ClearCookie(w, auth.UserCookie)
 			resp["error"] = "session_timeout"
+		} else if st == auth.StatusRestarted {
+			auth.ClearCookie(w, auth.UserCookie)
+			resp["error"] = "session_restarted"
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -278,4 +285,17 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func statusName(st auth.Status) string {
+	switch st {
+	case auth.StatusExpired:
+		return "timeout"
+	case auth.StatusRestarted:
+		return "restarted"
+	case auth.StatusInvalid:
+		return "invalid"
+	default:
+		return "unauthorized"
+	}
 }

@@ -80,7 +80,8 @@ func main() {
 	}
 	log.Printf("kubernetes client ready")
 
-	sessions := auth.NewSessions()
+	sessions := auth.NewSessions(*dataDir)
+	log.Printf("session epoch rotated (restart invalidates prior logins)")
 	adm := &admin.Server{
 		Store: store, K8s: kclient, Engine: nil, Sessions: sessions,
 		Password: admin.AdminPasswordFromEnv(), Version: version,
