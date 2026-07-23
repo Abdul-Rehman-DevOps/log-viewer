@@ -76,7 +76,9 @@ button.ghost:hover,button.theme-toggle:hover{border-color:var(--accent);backgrou
 .search{flex:0 0 auto;padding:.55rem .75rem;border-bottom:1px solid var(--border)}
 .search input{width:100%;padding:.5rem .65rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:.875rem}
 .list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:.4rem .5rem .7rem;scrollbar-gutter:stable}
-.ns-section{margin:.55rem 0 .25rem;padding:.25rem .15rem;background:transparent;border-bottom:1px solid var(--border);color:var(--muted);font-size:.65rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;position:sticky;top:0;z-index:1;backdrop-filter:blur(6px)}
+.ns-section{margin:.55rem 0 .25rem;padding:.3rem .15rem;background:var(--panel);border-bottom:1px solid color-mix(in oklch,var(--accent) 45%, var(--border));color:var(--text);font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;position:sticky;top:0;z-index:1}
+.ns-section .ns-label{color:var(--accent);font-weight:700}
+.ns-section .ns-name{color:var(--text);font-weight:700}
 .item{padding:.48rem .55rem;border-radius:6px;border:1px solid transparent;margin-bottom:.15rem}
 .item:hover{background:var(--item-hover)}
 .item.active{border-color:var(--item-active-border);background:var(--item-active)}

@@ -134,7 +134,7 @@ function renderList() {
   });
   let html = "";
   Object.keys(byNs).sort().forEach((ns) => {
-    html += "<div class=\"ns-section\">namespace · " + ns + "</div>";
+    html += "<div class=\"ns-section\"><span class=\"ns-label\">namespace</span> · <span class=\"ns-name\">" + ns + "</span></div>";
     byNs[ns].forEach((w) => {
       const idx = workloads.indexOf(w);
       const isActive = active && active.namespace === w.namespace && active.name === w.name && active.kind === w.kind;
