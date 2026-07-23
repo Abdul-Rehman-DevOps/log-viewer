@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Log Viewer</title>
+<link rel="icon" href="/assets/logo.png"/>
+<style>
+:root,[data-theme="dark"]{
+  --bg:#0b0f14;--panel:#121820;--border:#243040;--text:#e8eef6;--muted:#8b9bb0;
+  --accent:#2dd4a8;--accent-text:#062018;--log-bg:#080b0f;--item-hover:#18222d;
+  --item-active:#142822;--item-active-border:#2a5a4c;--bar-bg:#0f141a;--eof:#2dd4a8;
+  --section:#1a2430;--pod-tag:#3d9cf0;--font-size:13px;
+}
+[data-theme="light"]{
+  --bg:#f4f6f8;--panel:#fff;--border:#d5dde6;--text:#1a2330;--muted:#5b6b7c;
+  --accent:#0f9f7a;--accent-text:#fff;--log-bg:#fafbfc;--item-hover:#eef3f7;
+  --item-active:#e4f7f0;--item-active-border:#0f9f7a;--bar-bg:#eef2f6;--eof:#0f9f7a;
+  --section:#e8eef4;--pod-tag:#1d6fb8;
+}
+[data-theme="midnight"]{
+  --bg:#0a0a12;--panel:#12121f;--border:#2a2a44;--text:#e6e6ff;--muted:#9a9ab8;
+  --accent:#7c6cff;--accent-text:#0b0920;--log-bg:#07070f;--item-hover:#1a1a2e;
+  --item-active:#1c1638;--item-active-border:#7c6cff;--bar-bg:#10101c;--eof:#7c6cff;
+  --section:#18182a;--pod-tag:#a78bfa;
+}
+[data-theme="solarized"]{
+  --bg:#002b36;--panel:#073642;--border:#586e75;--text:#eee8d5;--muted:#93a1a1;
+  --accent:#859900;--accent-text:#002b36;--log-bg:#00212b;--item-hover:#0a3a45;
+  --item-active:#0d4a40;--item-active-border:#859900;--bar-bg:#073642;--eof:#b58900;
+  --section:#0a3540;--pod-tag:#268bd2;
+}
+[data-theme="nord"]{
+  --bg:#2e3440;--panel:#3b4252;--border:#4c566a;--text:#eceff4;--muted:#d8dee9;
+  --accent:#88c0d0;--accent-text:#2e3440;--log-bg:#272c36;--item-hover:#434c5e;
+  --item-active:#3d4f5c;--item-active-border:#88c0d0;--bar-bg:#3b4252;--eof:#a3be8c;
+  --section:#434c5e;--pod-tag:#81a1c1;
+}
+[data-theme="mono"]{
+  --bg:#111;--panel:#1a1a1a;--border:#333;--text:#f0f0f0;--muted:#aaa;
+  --accent:#fff;--accent-text:#111;--log-bg:#0a0a0a;--item-hover:#222;
+  --item-active:#2a2a2a;--item-active-border:#fff;--bar-bg:#161616;--eof:#fff;
+  --section:#222;--pod-tag:#ccc;
+}
+[data-theme="forest"]{
+  --bg:#0f1612;--panel:#162019;--border:#2a3d32;--text:#e7f5ec;--muted:#9bb5a6;
+  --accent:#3dd68c;--accent-text:#062016;--log-bg:#0b120e;--item-hover:#1c2a22;
+  --item-active:#173226;--item-active-border:#3dd68c;--bar-bg:#142018;--eof:#3dd68c;
+  --section:#1c2a22;--pod-tag:#6ee7b7;
+}
+[data-theme="crimson"]{
+  --bg:#14090b;--panel:#1c0f12;--border:#4a1f28;--text:#fce8ec;--muted:#c49aa3;
+  --accent:#e11d48;--accent-text:#fff5f7;--log-bg:#0f0709;--item-hover:#2a1419;
+  --item-active:#3a1018;--item-active-border:#e11d48;--bar-bg:#1a0c10;--eof:#fb7185;
+  --section:#2a1419;--pod-tag:#fda4af;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);background:var(--bg)}
+.app{display:grid;grid-template-columns:320px 1fr;height:100vh}
+aside{border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.75rem .9rem;border-bottom:1px solid var(--border)}
+.brand{display:flex;gap:.55rem;align-items:center}.brand img{width:32px;height:32px;border-radius:8px}
+.brand strong{font-size:.95rem}
+.tools{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.tools select,button.ghost,button.icon{
+  color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:7px;
+  padding:.28rem .45rem;font-size:.75rem;cursor:pointer
+}
+.search{padding:.55rem .75rem;border-bottom:1px solid var(--border)}
+.search input{width:100%;padding:.5rem .6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+.list{overflow:auto;flex:1;padding:.4rem .5rem .8rem}
+.ns-section{margin:.55rem 0 .35rem;padding:.35rem .55rem;border-radius:8px;background:var(--section);color:var(--muted);font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.item{padding:.5rem .65rem;border-radius:8px;cursor:pointer;border:1px solid transparent;margin-bottom:.22rem}
+.item:hover{background:var(--item-hover)}.item.active{border-color:var(--item-active-border);background:var(--item-active)}
+.item .name{font-weight:600;font-size:.9rem}.item .meta{color:var(--muted);font-size:.72rem;margin-top:.12rem}
+.kind{display:inline-block;font-size:.62rem;padding:.08rem .3rem;border-radius:999px;background:var(--section);color:var(--muted);margin-right:.28rem}
+main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.bar{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;padding:.55rem .8rem;border-bottom:1px solid var(--border);background:var(--bar-bg)}
+.bar select{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.35rem .45rem;max-width:260px}
+.bar button{border:0;border-radius:7px;padding:.4rem .7rem;font-weight:600;background:var(--accent);color:var(--accent-text);cursor:pointer}
+.bar button.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+#sel{font-weight:600;font-size:.85rem}
+.log-wrap{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;background:var(--log-bg)}
+#log{flex:1;overflow:auto;padding:.7rem .9rem 2.6rem;font-family:ui-monospace,Consolas,monospace;font-size:var(--font-size);line-height:1.45;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+#log .pod{color:var(--pod-tag);font-weight:600}
+.eof{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;gap:.55rem;padding:.5rem .85rem;background:linear-gradient(transparent,var(--log-bg) 40%);color:var(--muted);font-size:.72rem;pointer-events:none;z-index:2}
+.eof-line{flex:1;height:2px;border-radius:2px;background:var(--eof);position:relative;overflow:hidden;opacity:.85}
+.eof-line::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--log-bg),transparent);animation:eofscan 1.4s linear infinite}
+@keyframes eofscan{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.eof.hidden{display:none}
+.empty{color:var(--muted);padding:2rem;text-align:center}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.font-row{display:flex;align-items:center;gap:.3rem;color:var(--muted);font-size:.7rem}
+.font-row input{width:70px}
+</style></head>
+<body>
+<div class="app">
+  <aside>
+    <header class="top">
+      <div class="brand"><img src="/assets/logo.png" alt=""/><strong id="title">Log Viewer</strong></div>
+      <div class="tools">
+        <select id="themeSel" title="Theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="midnight">Midnight</option>
+          <option value="solarized">Solarized</option>
+          <option value="nord">Nord</option>
+          <option value="forest">Forest</option>
+          <option value="crimson">Crimson</option>
+          <option value="mono">Mono</option>
+        </select>
+        <button class="ghost" id="logout">Logout</button>
+      </div>
+    </header>
+    <div class="search">
+      <input id="q" placeholder="Filter workloads…"/>
+      <div class="font-row" style="margin-top:.45rem">Text size <input id="fontSize" type="range" min="11" max="18" value="13"/></div>
+    </div>
+    <div class="list" id="list"><div class="empty">Loading…</div></div>
+  </aside>
+  <main>
+    <div class="bar">
+      <span id="sel">Select a Deployment or StatefulSet</span>
+      <select id="pod" hidden></select>
+      <select id="container" hidden></select>
+      <button id="toggleLive" class="ghost" hidden>Stop</button>
+    </div>
+    <div class="log-wrap">
+      <pre id="log"><div class="empty">Pick a workload to stream logs</div></pre>
+      <div class="eof hidden" id="eof"><span class="live-dot"></span><span>Live · end of logs</span><span class="eof-line"></span></div>
+    </div>
+  </main>
+</div>
+<script src="/viewer/app.js"></script>
+</body></html>

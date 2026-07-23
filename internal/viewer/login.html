@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Log Viewer — Sign in</title>
+<link rel="icon" href="/assets/logo.png"/>
+<style>
+:root,[data-theme=dark]{--bg:#0b0f14;--panel:#151c24;--border:#2a3542;--text:#e8eef6;--muted:#8b9bb0;--accent:#2dd4a8;--accent-text:#062018}
+[data-theme=light]{--bg:#eef2f6;--panel:#fff;--border:#d5dde6;--text:#1a2330;--muted:#5b6b7c;--accent:#0f9f7a;--accent-text:#fff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);background:var(--bg)}
+.card{width:min(400px,92vw);background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:1.5rem;position:relative}
+.theme{position:absolute;top:.75rem;right:.75rem;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;padding:.25rem .5rem;cursor:pointer}
+.brand{display:flex;gap:.75rem;align-items:center;margin-bottom:1.1rem}
+.brand img{width:44px;height:44px;border-radius:10px}.brand strong{font-size:1.25rem}
+label{font-size:.9rem;color:var(--muted)}
+input{width:100%;margin:.35rem 0 .85rem;padding:.7rem .8rem;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+button.go{width:100%;border:0;border-radius:8px;padding:.75rem;font-weight:700;background:var(--accent);color:var(--accent-text);cursor:pointer}
+.err{color:#f07178;min-height:1.2rem;font-size:.9rem;margin-top:.55rem}
+.hint{color:var(--muted);font-size:.8rem;margin-top:.75rem}
+</style></head>
+<body>
+<div class="card">
+  <button class="theme" id="themeBtn" type="button">☀</button>
+  <div class="brand"><img src="/assets/logo.png" alt=""/><strong>Log Viewer</strong></div>
+  <label>Username</label><input id="u" autocomplete="username"/>
+  <label>Password</label><input id="p" type="password" autocomplete="current-password"/>
+  <button class="go" id="go">Sign in</button>
+  <div class="err" id="err"></div>
+  <div class="hint">Session expires after 1 hour.</div>
+</div>
+<script>
+function applyTheme(theme){document.documentElement.setAttribute("data-theme",theme);localStorage.setItem("lv_theme",theme);document.getElementById("themeBtn").textContent=theme==="dark"?"☀":"☾";}
+applyTheme(localStorage.getItem("lv_theme")||"dark");
+document.getElementById("themeBtn").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
+document.getElementById("go").onclick=async()=>{
+  const err=document.getElementById("err"); err.textContent="";
+  const res=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u.value,password:p.value})});
+  if(res.status===403){location.href="/setup";return;}
+  if(!res.ok){err.textContent="Invalid username or password";return;}
+  location.href="/";
+};
+document.getElementById("p").addEventListener("keydown",(e)=>{if(e.key==="Enter")document.getElementById("go").click();});
+</script>
+</body></html>

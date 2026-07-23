@@ -1,0 +1,19 @@
+{
+  "settings": {
+    "lightTheme": "dark",
+    "size": "medium",
+    "hourStyle": "24",
+    "dateLocale": "en-US",
+    "locale": "en",
+    "groupContainers": "at-least-2",
+    "showAllContainers": true,
+    "menuWidth": 28,
+    "softWrap": true,
+    "smallerScrollbars": true,
+    "compact": true,
+    "showTimestamp": true,
+    "showStd": false,
+    "search": true,
+    "collapseNav": false
+  }
+}

@@ -1,0 +1,22 @@
+# Binaries / build
+/bin/
+/dist/
+/out/
+/tmp-data/
+*.exe
+log-viewer
+!cmd/log-viewer/
+
+# Go
+/vendor/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.pem

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Log Viewer Admin</title>
+<link rel="icon" href="/assets/logo.png"/>
+<style>
+:root,[data-theme=dark]{--bg:#0b0f14;--panel:#151c24;--border:#2a3542;--text:#e7eef7;--muted:#8b9bb0;--accent:#2dd4a8;--accent-text:#062018;--danger:#f07178;--ok:#7fd99a;--nav:#10161d}
+[data-theme=light]{--bg:#eef2f6;--panel:#fff;--border:#d5dde6;--text:#1a2330;--muted:#5b6b7c;--accent:#0f9f7a;--accent-text:#fff;--danger:#c23b44;--ok:#1a7f4b;--nav:#f7f9fb}
+*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.5rem;border-bottom:1px solid var(--border);background:var(--panel)}
+.brand{display:flex;gap:.75rem;align-items:center}.brand img{width:40px;height:40px;border-radius:10px}
+.brand strong{font-size:1.15rem}.pill{font-size:.72rem;padding:.1rem .45rem;border-radius:999px;background:var(--border);color:var(--muted);margin-left:.35rem}
+.header-actions{display:flex;gap:.5rem;align-items:center}
+a.btn,button{border:0;border-radius:8px;padding:.55rem .9rem;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-text);text-decoration:none;display:inline-block;font-size:.9rem}
+button.secondary,a.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+.layout{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 70px)}
+nav{background:var(--nav);border-right:1px solid var(--border);padding:.75rem}
+nav button{width:100%;text-align:left;margin-bottom:.35rem;background:transparent;color:var(--muted);border:1px solid transparent}
+nav button.active{background:var(--panel);color:var(--text);border-color:var(--border)}
+main{max-width:980px;padding:1.25rem 1.5rem}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1.15rem 1.3rem;margin-bottom:1rem}
+h2{margin:0 0 .45rem;font-size:1.05rem}p.help{margin:0 0 .9rem;color:var(--muted);font-size:.9rem;line-height:1.45}
+.modes,.row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+.ns-grid,.wl-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.3rem .6rem;max-height:320px;overflow:auto;border:1px dashed var(--border);border-radius:10px;padding:.5rem}
+label.row{display:flex;gap:.45rem;align-items:center;margin:.25rem 0}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem}
+.wl-card{border:1px solid var(--border);border-radius:10px;padding:.75rem;background:var(--bg)}
+input[type=text],input[type=password],select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem .7rem}
+.actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.9rem}
+.status{margin-top:.7rem;font-size:.9rem;color:var(--muted);min-height:1.1rem}.status.ok{color:var(--ok)}.status.err{color:var(--danger)}
+.hidden{display:none!important}
+table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.45rem;border-bottom:1px solid var(--border);text-align:left}
+#login{max-width:420px;margin:3.5rem auto}
+.sticky-save{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding:1rem 0 .25rem}
+@media(max-width:800px){.layout{grid-template-columns:1fr}}
+</style></head>
+<body>
+<header>
+  <div class="brand"><img src="/assets/logo.png" alt=""/><div><strong>Log Viewer <span class="pill">Admin</span></strong></div></div>
+  <div class="header-actions">
+    <button class="secondary" id="themeBtn" type="button">☀</button>
+    <a class="btn secondary" href="/">Open viewer</a>
+  </div>
+</header>
+
+<section id="login" class="card hidden">
+  <h2>Admin login</h2>
+  <p class="help">Session expires after 1 hour. Use the bootstrap admin password.</p>
+  <input id="password" type="password" placeholder="Admin password"/>
+  <div class="actions"><button id="btnLogin">Sign in</button></div>
+  <div id="loginStatus" class="status"></div>
+</section>
+
+<div id="shell" class="layout hidden">
+  <nav>
+    <button type="button" class="nav active" data-tab="ns">Namespaces</button>
+    <button type="button" class="nav" data-tab="apps">Apps</button>
+    <button type="button" class="nav" data-tab="wl">Kinds</button>
+    <button type="button" class="nav" data-tab="users">Users</button>
+    <button type="button" class="nav" data-tab="display">Display</button>
+  </nav>
+  <main>
+    <div class="card tab" id="tab-ns">
+      <h2>Namespaces</h2>
+      <p class="help">Which namespaces the viewer can see. Apply is realtime and shared across pods.</p>
+      <div class="modes">
+        <label class="row"><input type="radio" name="mode" value="exclude"/> <strong>Exclude</strong></label>
+        <label class="row"><input type="radio" name="mode" value="include"/> <strong>Include</strong></label>
+      </div>
+      <div id="nsGrid" class="ns-grid"></div>
+      <div class="actions">
+        <button type="button" class="secondary" id="btnAll">Select all</button>
+        <button type="button" class="secondary" id="btnNone">Clear</button>
+      </div>
+    </div>
+
+    <div class="card tab hidden" id="tab-apps">
+      <h2>Specific Deployments / StatefulSets</h2>
+      <p class="help">Pick a namespace, then choose which apps appear in the viewer. Leave all unchecked to show every app in allowed namespaces.</p>
+      <label class="row" style="flex-direction:column;align-items:stretch;gap:.35rem">
+        <span>Namespace</span>
+        <select id="appNs"></select>
+      </label>
+      <div class="actions">
+        <button type="button" class="secondary" id="btnLoadApps">Load apps</button>
+        <button type="button" class="secondary" id="btnAppsAll">Select all loaded</button>
+        <button type="button" class="secondary" id="btnAppsClear">Clear selection for this NS</button>
+      </div>
+      <div id="appPick" class="wl-pick" style="margin-top:.75rem"></div>
+      <p class="help" id="allowedCount" style="margin-top:.75rem;margin-bottom:0"></p>
+    </div>
+
+    <div class="card tab hidden" id="tab-wl">
+      <h2>Workload kinds</h2>
+      <p class="help">Which Kubernetes kinds can appear. Nodes are never shown.</p>
+      <div class="wl-grid">
+        <label class="wl-card"><input type="checkbox" id="wlDeploy"/> <strong>Deployments</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlSTS"/> <strong>StatefulSets</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlDS"/> <strong>DaemonSets</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlJobs"/> <strong>Jobs</strong></label>
+      </div>
+    </div>
+
+    <div class="card tab hidden" id="tab-users">
+      <h2>Viewer users</h2>
+      <p class="help">At least one user is required. After you create users, the viewer shows a login screen (session: 1 hour).</p>
+      <table><thead><tr><th>Username</th><th>Password</th><th>Enabled</th><th></th></tr></thead>
+      <tbody id="users"></tbody></table>
+      <div class="actions"><button type="button" class="secondary" id="btnAddUser">Add user</button></div>
+    </div>
+
+    <div class="card tab hidden" id="tab-display">
+      <h2>Display</h2>
+      <label class="row" style="flex-direction:column;align-items:stretch"><span>Title</span>
+        <input id="title" type="text" placeholder="Log Viewer"/></label>
+    </div>
+
+    <div class="sticky-save">
+      <div class="actions">
+        <button id="btnSave">Save &amp; apply now</button>
+        <button type="button" class="secondary" id="btnReload">Reload</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+  </main>
+</div>
+<script src="/admin/app.js"></script>
+</body></html>
