@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/AIVMNetwork/log-viewer/internal/config"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
 )
 
 var pktZone = func() *time.Location {

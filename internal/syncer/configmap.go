@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
-	"github.com/AIVMNetwork/log-viewer/internal/config"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
 )
 
 // ConfigMapSync keeps settings shared across replicas.

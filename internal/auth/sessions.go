@@ -15,7 +15,8 @@ import (
 const (
 	AdminCookie = "lv_admin"
 	UserCookie  = "lv_session"
-	SessionTTL  = time.Hour
+	// SessionTTL is sliding: refreshed on activity; idle beyond this logs the user out.
+	SessionTTL = 10 * time.Minute
 )
 
 type Session struct {
@@ -23,6 +24,15 @@ type Session struct {
 	Role     string `json:"r"` // admin | user
 	Exp      int64  `json:"e"`
 }
+
+type Status int
+
+const (
+	StatusMissing Status = iota
+	StatusOK
+	StatusExpired
+	StatusInvalid
+)
 
 type Sessions struct {
 	secret []byte
@@ -51,15 +61,28 @@ func (s *Sessions) Create(username, role string, ttl time.Duration) (string, err
 	return s.sign(sess)
 }
 
+// Touch issues a new token with a fresh sliding expiry.
+func (s *Sessions) Touch(sess Session) (string, error) {
+	return s.Create(sess.Username, sess.Role, SessionTTL)
+}
+
 func (s *Sessions) Get(id string) (Session, bool) {
+	sess, st := s.Lookup(id)
+	return sess, st == StatusOK
+}
+
+func (s *Sessions) Lookup(id string) (Session, Status) {
+	if id == "" {
+		return Session{}, StatusMissing
+	}
 	sess, err := s.verify(id)
 	if err != nil {
-		return Session{}, false
+		return Session{}, StatusInvalid
 	}
 	if time.Now().Unix() > sess.Exp {
-		return Session{}, false
+		return sess, StatusExpired
 	}
-	return sess, true
+	return sess, StatusOK
 }
 
 func (s *Sessions) Delete(id string) {}
@@ -135,4 +158,24 @@ func CookieMaxAge() int {
 
 func SessionTTLSeconds() string {
 	return strconv.Itoa(int(SessionTTL.Seconds()))
+}
+
+// WriteUnauthorized returns 401 with a clear JSON reason for the UI.
+func WriteUnauthorized(w http.ResponseWriter, status Status) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	msg := `{"error":"unauthorized"}`
+	if status == StatusExpired {
+		msg = `{"error":"session_timeout","message":"Session timed out due to inactivity. Please sign in again."}`
+	}
+	_, _ = w.Write([]byte(msg))
+}
+
+// SlideCookie refreshes the sliding session cookie after a successful auth check.
+func SlideCookie(w http.ResponseWriter, sessions *Sessions, cookieName string, sess Session) {
+	id, err := sessions.Touch(sess)
+	if err != nil {
+		return
+	}
+	SetCookie(w, cookieName, id, CookieMaxAge())
 }

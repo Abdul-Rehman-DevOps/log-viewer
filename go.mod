@@ -1,4 +1,4 @@
-module github.com/AIVMNetwork/log-viewer
+module github.com/Abdul-Rehman-DevOps/log-viewer
 
 go 1.25.0
 

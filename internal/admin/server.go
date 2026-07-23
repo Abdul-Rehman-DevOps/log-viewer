@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/AIVMNetwork/log-viewer/internal/auth"
-	"github.com/AIVMNetwork/log-viewer/internal/config"
-	"github.com/AIVMNetwork/log-viewer/internal/engine"
-	"github.com/AIVMNetwork/log-viewer/internal/k8s"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/auth"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/engine"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/k8s"
 )
 
 type Server struct {
@@ -48,8 +49,16 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		id := auth.CookieValue(r, auth.AdminCookie)
-		if sess, ok := s.Sessions.Get(id); ok && sess.Role == "admin" {
+		sess, st := s.Sessions.Lookup(id)
+		if st == auth.StatusOK && sess.Role == "admin" {
+			auth.SlideCookie(w, s.Sessions, auth.AdminCookie, sess)
 			next(w, r)
+			return
+		}
+		if st == auth.StatusExpired {
+			log.Printf("admin session timeout path=%s", r.URL.Path)
+			auth.ClearCookie(w, auth.AdminCookie)
+			auth.WriteUnauthorized(w, auth.StatusExpired)
 			return
 		}
 		// legacy bearer = raw password (compat)
@@ -58,7 +67,7 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		auth.WriteUnauthorized(w, st)
 	}
 }
 
@@ -72,15 +81,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if s.Password != "" && subtle.ConstantTimeCompare([]byte(body.Password), []byte(s.Password)) != 1 {
+		log.Printf("admin login failed")
 		http.Error(w, `{"error":"invalid password"}`, http.StatusUnauthorized)
 		return
 	}
 	id, err := s.Sessions.Create("admin", "admin", auth.SessionTTL)
 	if err != nil {
+		log.Printf("admin login session error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	auth.SetCookie(w, auth.AdminCookie, id, auth.CookieMaxAge())
+	log.Printf("admin login ok idle_timeout=%s", auth.SessionTTL)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "expiresIn": int(auth.SessionTTL.Seconds())})
 }
 
@@ -88,6 +100,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	id := auth.CookieValue(r, auth.AdminCookie)
 	s.Sessions.Delete(id)
 	auth.ClearCookie(w, auth.AdminCookie)
+	log.Printf("admin logout")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -102,11 +115,14 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.Store.Update(next); err != nil {
+			log.Printf("admin config update rejected: %v", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		log.Printf("admin config saved mode=%s users=%d allowedApps=%d", next.Mode, len(next.Users), len(next.AllowedWorkloads))
 		// Realtime: refresh engine namespace scope immediately
 		if err := s.applyCurrent(r.Context()); err != nil {
+			log.Printf("admin config apply warning: %v", err)
 			// still saved — report warning but return 200 with note
 			writeJSON(w, http.StatusOK, map[string]any{
 				"config":  s.Store.GetForAdmin(),

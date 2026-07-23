@@ -42,6 +42,12 @@ type Settings struct {
 	// AllowedWorkloads keys: "namespace/Kind/name" e.g. "dev/Deployment/api".
 	// Empty = show all workloads of enabled kinds in allowed namespaces.
 	AllowedWorkloads []string `json:"allowedWorkloads"`
+
+	// About / branding links (shown in viewer About panel).
+	AuthorName   string `json:"authorName"`
+	GitHubURL    string `json:"githubUrl"`
+	PortfolioURL string `json:"portfolioUrl"`
+	RepoURL      string `json:"repoUrl"`
 }
 
 func Default() Settings {
@@ -60,6 +66,10 @@ func Default() Settings {
 			Jobs:         false,
 		},
 		AllowedWorkloads: []string{},
+		AuthorName:       "Abdul Rehman",
+		GitHubURL:        "https://github.com/Abdul-Rehman-DevOps",
+		PortfolioURL:     "https://abdulrehman.cz/",
+		RepoURL:          "https://github.com/Abdul-Rehman-DevOps/log-viewer",
 	}
 }
 
@@ -95,6 +105,18 @@ func normalize(cur *Settings) {
 	}
 	if cur.Title == "" {
 		cur.Title = "Log Viewer"
+	}
+	if cur.AuthorName == "" {
+		cur.AuthorName = "Abdul Rehman"
+	}
+	if cur.GitHubURL == "" {
+		cur.GitHubURL = "https://github.com/Abdul-Rehman-DevOps"
+	}
+	if cur.PortfolioURL == "" {
+		cur.PortfolioURL = "https://abdulrehman.cz/"
+	}
+	if cur.RepoURL == "" {
+		cur.RepoURL = "https://github.com/Abdul-Rehman-DevOps/log-viewer"
 	}
 	if cur.Mode == "" {
 		cur.Mode = "exclude"
@@ -135,6 +157,12 @@ func (s *Store) Update(next Settings) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Author branding is locked — Admin UI cannot change these fields.
+	next.AuthorName = s.cur.AuthorName
+	next.GitHubURL = s.cur.GitHubURL
+	next.PortfolioURL = s.cur.PortfolioURL
+	next.RepoURL = s.cur.RepoURL
 
 	mergedUsers, err := mergeUsers(s.cur.Users, next.Users)
 	if err != nil {

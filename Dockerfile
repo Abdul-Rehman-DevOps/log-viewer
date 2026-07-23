@@ -10,14 +10,14 @@ RUN go mod download 2>/dev/null || true
 COPY . .
 ENV GOTOOLCHAIN=auto
 RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -buildvcs=false -ldflags="-s -w -X main.version=0.4.0" \
+    go build -buildvcs=false -ldflags="-s -w -X main.version=0.5.3" \
     -o /out/log-viewer ./cmd/log-viewer
 
 FROM alpine:3.20
 LABEL org.opencontainers.image.title="Log Viewer" \
       org.opencontainers.image.description="Open-source Kubernetes log viewer with admin panel — by Abdul Rehman" \
       org.opencontainers.image.authors="Abdul Rehman" \
-      org.opencontainers.image.source="https://github.com/AIVMNetwork/log-viewer"
+      org.opencontainers.image.source="https://github.com/Abdul-Rehman-DevOps/log-viewer"
 
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 1000 logviewer

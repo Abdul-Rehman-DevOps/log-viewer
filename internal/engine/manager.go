@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AIVMNetwork/log-viewer/internal/config"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
 )
 
 // Manager runs Dozzle as a child process and restarts it when settings change.

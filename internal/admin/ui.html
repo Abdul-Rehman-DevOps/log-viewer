@@ -4,51 +4,135 @@
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Log Viewer Admin</title>
 <link rel="icon" href="/assets/logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
-:root,[data-theme=dark]{--bg:#0b0f14;--panel:#151c24;--border:#2a3542;--text:#e7eef7;--muted:#8b9bb0;--accent:#2dd4a8;--accent-text:#062018;--danger:#f07178;--ok:#7fd99a;--nav:#10161d}
-[data-theme=light]{--bg:#eef2f6;--panel:#fff;--border:#d5dde6;--text:#1a2330;--muted:#5b6b7c;--accent:#0f9f7a;--accent-text:#fff;--danger:#c23b44;--ok:#1a7f4b;--nav:#f7f9fb}
-*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh}
-header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.5rem;border-bottom:1px solid var(--border);background:var(--panel)}
-.brand{display:flex;gap:.75rem;align-items:center}.brand img{width:40px;height:40px;border-radius:10px}
-.brand strong{font-size:1.15rem}.pill{font-size:.72rem;padding:.1rem .45rem;border-radius:999px;background:var(--border);color:var(--muted);margin-left:.35rem}
+:root,[data-theme="dark"]{
+  --bg:#0b0f14;--panel:#121820;--border:#243040;--text:#e8eef6;--muted:#8b9bb0;
+  --accent:#2dd4a8;--accent-text:#062018;--danger:#ff6b7a;--ok:#7fd99a;--nav:#0d131b;
+  --chip:#1a2430;--input:#080b0f;--shadow:0 18px 50px rgba(0,0,0,.35);--link:#5ec8ff;
+}
+[data-theme="light"]{
+  --bg:#f4f6f8;--panel:#fff;--border:#d5dde6;--text:#1a2330;--muted:#5b6b7c;
+  --accent:#0f9f7a;--accent-text:#fff;--danger:#c23b44;--ok:#1a7f4b;--nav:#f7f9fb;
+  --chip:#e8eef4;--input:#fafbfc;--shadow:0 18px 50px rgba(20,40,60,.1);--link:#0b6bcb;
+}
+[data-theme="midnight"]{
+  --bg:#0a0a12;--panel:#12121f;--border:#2a2a44;--text:#e6e6ff;--muted:#9a9ab8;
+  --accent:#7c6cff;--accent-text:#0b0920;--danger:#fb7185;--ok:#34d399;--nav:#0d0d18;
+  --chip:#18182a;--input:#07070f;--shadow:0 18px 50px rgba(0,0,0,.45);--link:#c4b5fd;
+}
+[data-theme="solarized"]{
+  --bg:#002b36;--panel:#073642;--border:#586e75;--text:#eee8d5;--muted:#93a1a1;
+  --accent:#859900;--accent-text:#002b36;--danger:#dc322f;--ok:#859900;--nav:#00212b;
+  --chip:#0a3540;--input:#00212b;--shadow:0 18px 50px rgba(0,0,0,.35);--link:#2aa198;
+}
+[data-theme="nord"]{
+  --bg:#2e3440;--panel:#3b4252;--border:#4c566a;--text:#eceff4;--muted:#d8dee9;
+  --accent:#88c0d0;--accent-text:#2e3440;--danger:#bf616a;--ok:#a3be8c;--nav:#272c36;
+  --chip:#434c5e;--input:#272c36;--shadow:0 18px 50px rgba(0,0,0,.3);--link:#88c0d0;
+}
+[data-theme="forest"]{
+  --bg:#0f1612;--panel:#162019;--border:#2a3d32;--text:#e7f5ec;--muted:#9bb5a6;
+  --accent:#3dd68c;--accent-text:#062016;--danger:#fb7185;--ok:#34d399;--nav:#0b120e;
+  --chip:#1c2a22;--input:#0b120e;--shadow:0 18px 50px rgba(0,0,0,.35);--link:#6ee7b7;
+}
+[data-theme="crimson"]{
+  --bg:#14090b;--panel:#1c0f12;--border:#4a1f28;--text:#fce8ec;--muted:#c49aa3;
+  --accent:#e11d48;--accent-text:#fff5f7;--danger:#fb7185;--ok:#86efac;--nav:#0f0709;
+  --chip:#2a1419;--input:#0f0709;--shadow:0 18px 50px rgba(0,0,0,.4);--link:#fb7185;
+}
+[data-theme="mono"]{
+  --bg:#111;--panel:#1a1a1a;--border:#333;--text:#f0f0f0;--muted:#aaa;
+  --accent:#fff;--accent-text:#111;--danger:#fff;--ok:#ddd;--nav:#0a0a0a;
+  --chip:#222;--input:#0a0a0a;--shadow:0 18px 50px rgba(0,0,0,.5);--link:#fff;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;font-family:"IBM Plex Sans",system-ui,sans-serif;color:var(--text);
+  background:radial-gradient(900px 420px at 0% -10%, color-mix(in srgb,var(--accent) 16%, transparent), transparent), var(--bg);
+  min-height:100vh
+}
+button,a,select,input{cursor:pointer;font-family:inherit}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{
+  display:flex;justify-content:space-between;align-items:center;padding:1rem 1.4rem;
+  border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--panel) 92%, transparent);
+  backdrop-filter:blur(10px);position:sticky;top:0;z-index:5
+}
+.brand{display:flex;gap:.75rem;align-items:center}.brand img{width:40px;height:40px;border-radius:11px;box-shadow:var(--shadow)}
+.brand strong{font-size:1.12rem;font-weight:650}.pill{font-size:.7rem;padding:.15rem .5rem;border-radius:999px;background:var(--chip);color:var(--muted);margin-left:.4rem;border:1px solid var(--border)}
 .header-actions{display:flex;gap:.5rem;align-items:center}
-a.btn,button{border:0;border-radius:8px;padding:.55rem .9rem;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-text);text-decoration:none;display:inline-block;font-size:.9rem}
+.header-actions select{background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.45rem .6rem;font-size:.8rem}
+a.btn,button{
+  border:0;border-radius:10px;padding:.58rem 1rem;font-weight:650;cursor:pointer;
+  background:var(--accent);color:var(--accent-text);text-decoration:none;display:inline-flex;
+  align-items:center;gap:.4rem;font-size:.88rem;transition:transform .12s,opacity .15s,border-color .15s
+}
+a.btn:hover,button:hover{opacity:.93}a.btn:active,button:active{transform:translateY(1px)}
 button.secondary,a.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
-.layout{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 70px)}
-nav{background:var(--nav);border-right:1px solid var(--border);padding:.75rem}
-nav button{width:100%;text-align:left;margin-bottom:.35rem;background:transparent;color:var(--muted);border:1px solid transparent}
-nav button.active{background:var(--panel);color:var(--text);border-color:var(--border)}
-main{max-width:980px;padding:1.25rem 1.5rem}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1.15rem 1.3rem;margin-bottom:1rem}
-h2{margin:0 0 .45rem;font-size:1.05rem}p.help{margin:0 0 .9rem;color:var(--muted);font-size:.9rem;line-height:1.45}
+button.icon{padding:.4rem .55rem;min-width:2.1rem;justify-content:center}
+.layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 72px)}
+nav{background:var(--nav);border-right:1px solid var(--border);padding:.85rem .7rem}
+nav button{width:100%;text-align:left;margin-bottom:.4rem;background:transparent;color:var(--muted);border:1px solid transparent;justify-content:flex-start}
+nav button.active,nav button:hover{background:var(--panel);color:var(--text);border-color:var(--border)}
+main{max-width:980px;padding:1.35rem 1.5rem 2rem}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:1.2rem 1.3rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+h2{margin:0 0 .4rem;font-size:1.08rem;font-weight:650}p.help{margin:0 0 1rem;color:var(--muted);font-size:.9rem;line-height:1.5}
 .modes,.row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
-.ns-grid,.wl-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.3rem .6rem;max-height:320px;overflow:auto;border:1px dashed var(--border);border-radius:10px;padding:.5rem}
-label.row{display:flex;gap:.45rem;align-items:center;margin:.25rem 0}
-.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem}
-.wl-card{border:1px solid var(--border);border-radius:10px;padding:.75rem;background:var(--bg)}
-input[type=text],input[type=password],select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:.55rem .7rem}
-.actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.9rem}
-.status{margin-top:.7rem;font-size:.9rem;color:var(--muted);min-height:1.1rem}.status.ok{color:var(--ok)}.status.err{color:var(--danger)}
+.ns-grid,.wl-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.4rem .65rem;max-height:320px;overflow:auto;border:1px dashed var(--border);border-radius:12px;padding:.65rem;background:color-mix(in srgb,var(--bg) 70%, transparent)}
+label.row{display:flex;gap:.45rem;align-items:center;margin:.2rem 0;padding:.2rem .15rem;border-radius:8px}
+label.row:hover{background:color-mix(in srgb,var(--accent) 8%, transparent)}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.65rem}
+.wl-card{border:1px solid var(--border);border-radius:12px;padding:.85rem;background:var(--input);transition:border-color .15s,transform .12s}
+.wl-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.field{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.85rem}
+.field span{font-size:.82rem;color:var(--muted)}
+input[type=text],input[type=password],select{width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.62rem .75rem}
+.readonly-box{
+  width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);
+  border-radius:10px;padding:.62rem .75rem;font-size:.9rem;word-break:break-all
+}
+.readonly-box a{color:var(--link);text-decoration:none}.readonly-box a:hover{text-decoration:underline}
+.lock-note{display:inline-flex;align-items:center;gap:.35rem;font-size:.75rem;color:var(--muted);margin-bottom:.85rem}
+.actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem;align-items:center}
+.status{margin-top:.75rem;font-size:.9rem;color:var(--muted);min-height:1.1rem}.status.ok{color:var(--ok)}.status.err{color:var(--danger)}
 .hidden{display:none!important}
-table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.45rem;border-bottom:1px solid var(--border);text-align:left}
-#login{max-width:420px;margin:3.5rem auto}
-.sticky-save{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding:1rem 0 .25rem}
-@media(max-width:800px){.layout{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.55rem .4rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+#login{max-width:440px;margin:4rem auto}
+.sticky-save{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 28%);padding:1.1rem 0 .2rem}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem;margin-bottom:1rem}
+.stat{border:1px solid var(--border);border-radius:12px;padding:.8rem;background:var(--input)}
+.stat b{display:block;font-size:1.15rem}.stat span{color:var(--muted);font-size:.78rem}
+.pass-cell{display:flex;gap:.35rem;align-items:center;min-width:280px}
+.pass-cell input{flex:1;min-width:0;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.82rem}
+.pass-tools{display:flex;gap:.25rem;flex-shrink:0}
+@media(max-width:860px){.layout{grid-template-columns:1fr}.stat-row{grid-template-columns:1fr}.pass-cell{min-width:0;flex-wrap:wrap}}
 </style></head>
 <body>
 <header>
   <div class="brand"><img src="/assets/logo.png" alt=""/><div><strong>Log Viewer <span class="pill">Admin</span></strong></div></div>
   <div class="header-actions">
-    <button class="secondary" id="themeBtn" type="button">☀</button>
+    <select id="themeSel" aria-label="Theme" title="Theme">
+      <option value="dark">Dark</option>
+      <option value="light">Light</option>
+      <option value="midnight">Midnight</option>
+      <option value="solarized">Solarized</option>
+      <option value="nord">Nord</option>
+      <option value="forest">Forest</option>
+      <option value="crimson">Crimson</option>
+      <option value="mono">Mono</option>
+    </select>
     <a class="btn secondary" href="/">Open viewer</a>
   </div>
 </header>
 
 <section id="login" class="card hidden">
   <h2>Admin login</h2>
-  <p class="help">Session expires after 1 hour. Use the bootstrap admin password.</p>
-  <input id="password" type="password" placeholder="Admin password"/>
-  <div class="actions"><button id="btnLogin">Sign in</button></div>
+  <p class="help">Use the bootstrap admin password from your deployment.</p>
+  <div class="field"><span>Password</span><input id="password" type="password" placeholder="Admin password" autocomplete="current-password"/></div>
+  <div class="actions"><button id="btnLogin" type="button">Sign in</button></div>
   <div id="loginStatus" class="status"></div>
 </section>
 
@@ -58,15 +142,22 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.45rem;b
     <button type="button" class="nav" data-tab="apps">Apps</button>
     <button type="button" class="nav" data-tab="wl">Kinds</button>
     <button type="button" class="nav" data-tab="users">Users</button>
+    <button type="button" class="nav" data-tab="about">About</button>
     <button type="button" class="nav" data-tab="display">Display</button>
   </nav>
   <main>
+    <div class="stat-row" id="stats">
+      <div class="stat"><b id="statNs">—</b><span>Namespaces visible</span></div>
+      <div class="stat"><b id="statUsers">—</b><span>Viewer users</span></div>
+      <div class="stat"><b id="statApps">—</b><span>Pinned apps</span></div>
+    </div>
+
     <div class="card tab" id="tab-ns">
       <h2>Namespaces</h2>
-      <p class="help">Which namespaces the viewer can see. Apply is realtime and shared across pods.</p>
+      <p class="help">Choose what the viewer can see. Changes apply immediately and sync across replicas.</p>
       <div class="modes">
-        <label class="row"><input type="radio" name="mode" value="exclude"/> <strong>Exclude</strong></label>
-        <label class="row"><input type="radio" name="mode" value="include"/> <strong>Include</strong></label>
+        <label class="row"><input type="radio" name="mode" value="exclude"/> <strong>Exclude</strong> — all except selected</label>
+        <label class="row"><input type="radio" name="mode" value="include"/> <strong>Include</strong> — only selected</label>
       </div>
       <div id="nsGrid" class="ns-grid"></div>
       <div class="actions">
@@ -77,48 +168,57 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.45rem;b
 
     <div class="card tab hidden" id="tab-apps">
       <h2>Specific Deployments / StatefulSets</h2>
-      <p class="help">Pick a namespace, then choose which apps appear in the viewer. Leave all unchecked to show every app in allowed namespaces.</p>
-      <label class="row" style="flex-direction:column;align-items:stretch;gap:.35rem">
-        <span>Namespace</span>
-        <select id="appNs"></select>
-      </label>
+      <p class="help">Pin exact apps per namespace. Leave empty to show all apps in allowed namespaces.</p>
+      <div class="field"><span>Namespace</span><select id="appNs"></select></div>
       <div class="actions">
         <button type="button" class="secondary" id="btnLoadApps">Load apps</button>
         <button type="button" class="secondary" id="btnAppsAll">Select all loaded</button>
-        <button type="button" class="secondary" id="btnAppsClear">Clear selection for this NS</button>
+        <button type="button" class="secondary" id="btnAppsClear">Clear this namespace</button>
       </div>
-      <div id="appPick" class="wl-pick" style="margin-top:.75rem"></div>
-      <p class="help" id="allowedCount" style="margin-top:.75rem;margin-bottom:0"></p>
+      <div id="appPick" class="wl-pick" style="margin-top:.8rem"></div>
+      <p class="help" id="allowedCount" style="margin-top:.8rem;margin-bottom:0"></p>
     </div>
 
     <div class="card tab hidden" id="tab-wl">
       <h2>Workload kinds</h2>
-      <p class="help">Which Kubernetes kinds can appear. Nodes are never shown.</p>
+      <p class="help">Which Kubernetes kinds appear. Nodes are never shown.</p>
+      <div class="actions" style="margin-top:0;margin-bottom:.75rem">
+        <button type="button" class="secondary" id="btnKindsAll">Select all</button>
+      </div>
       <div class="wl-grid">
-        <label class="wl-card"><input type="checkbox" id="wlDeploy"/> <strong>Deployments</strong></label>
-        <label class="wl-card"><input type="checkbox" id="wlSTS"/> <strong>StatefulSets</strong></label>
-        <label class="wl-card"><input type="checkbox" id="wlDS"/> <strong>DaemonSets</strong></label>
-        <label class="wl-card"><input type="checkbox" id="wlJobs"/> <strong>Jobs</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlDeploy" class="kind-cb"/> <strong>Deployments</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlSTS" class="kind-cb"/> <strong>StatefulSets</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlDS" class="kind-cb"/> <strong>DaemonSets</strong></label>
+        <label class="wl-card"><input type="checkbox" id="wlJobs" class="kind-cb"/> <strong>Jobs</strong></label>
       </div>
     </div>
 
     <div class="card tab hidden" id="tab-users">
       <h2>Viewer users</h2>
-      <p class="help">At least one user is required. After you create users, the viewer shows a login screen (session: 1 hour).</p>
+      <p class="help">At least one enabled user is required. Idle sessions expire after 10 minutes. Generate a strong password, then show or copy it.</p>
       <table><thead><tr><th>Username</th><th>Password</th><th>Enabled</th><th></th></tr></thead>
       <tbody id="users"></tbody></table>
       <div class="actions"><button type="button" class="secondary" id="btnAddUser">Add user</button></div>
     </div>
 
+    <div class="card tab hidden" id="tab-about">
+      <h2>About</h2>
+      <p class="help">Author branding for the viewer “Learn more” panel. Locked — not editable from Admin.</p>
+      <div class="lock-note">🔒 Read-only branding</div>
+      <div class="field"><span>Author name</span><div class="readonly-box" id="authorName">—</div></div>
+      <div class="field"><span>Portfolio</span><div class="readonly-box" id="portfolioUrl">—</div></div>
+      <div class="field"><span>GitHub profile</span><div class="readonly-box" id="githubUrl">—</div></div>
+      <div class="field"><span>Project repo</span><div class="readonly-box" id="repoUrl">—</div></div>
+    </div>
+
     <div class="card tab hidden" id="tab-display">
       <h2>Display</h2>
-      <label class="row" style="flex-direction:column;align-items:stretch"><span>Title</span>
-        <input id="title" type="text" placeholder="Log Viewer"/></label>
+      <div class="field"><span>Viewer title</span><input id="title" type="text" placeholder="Log Viewer"/></div>
     </div>
 
     <div class="sticky-save">
       <div class="actions">
-        <button id="btnSave">Save &amp; apply now</button>
+        <button id="btnSave" type="button">Save &amp; apply now</button>
         <button type="button" class="secondary" id="btnReload">Reload</button>
       </div>
       <div id="status" class="status"></div>

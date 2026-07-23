@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AIVMNetwork/log-viewer/internal/k8s"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/k8s"
 )
 
 // Exercise format via exported behavior through Stream is hard; test helper logic by

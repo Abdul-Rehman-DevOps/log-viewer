@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/AIVMNetwork/log-viewer/internal/config"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
 )
 
 func TestResolveNamespacesExclude(t *testing.T) {
