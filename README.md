@@ -6,7 +6,7 @@
 **Repository:** [github.com/Abdul-Rehman-DevOps/log-viewer](https://github.com/Abdul-Rehman-DevOps/log-viewer)  
 **License:** [MIT](LICENSE)
 
-Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming, Admin-controlled access, viewer logins, themes, and branding — without shipping your logs to a third-party SaaS.
+Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming, Admin-controlled access, viewer logins, and branding — without shipping your logs to a third-party SaaS.
 
 ---
 
@@ -14,13 +14,16 @@ Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming,
 
 ### Viewer (`/`)
 - Live logs for **Deployments**, **StatefulSets**, **DaemonSets**, and **Jobs** (kinds are Admin-controlled)
-- Multi-pod stream with pod name prefixes
-- ANSI stripped; timestamps shown in **PKT**
-- Colorized levels: `ERROR` / `WARN` / `INFO` / `DEBUG`
-- Always live on workload select (no Start/Stop button); scroll up for history
+- Dynamic discovery from the live cluster (namespaces + workloads via the Kubernetes API)
+- Multi-pod stream with colored source badges, timestamps, and level indicators
+- ANSI colors preserved (NestJS / terminal colors render in the log pane)
+- Structured log coloring: JSON, logfmt (`key=value`), and plain text
+- Level highlighting for `ERROR` / `WARN` / `INFO` / `LOG` / `DEBUG`
+- Timestamps shown in **PKT**
+- Always live on workload select (no Start/Stop); scroll up for history; jump-to-latest control
 - Independent sidebar scroller for long workload lists
-- Themes: Dark, Light, Midnight, Solarized, Nord, Forest, Crimson, Mono
-- Adjustable log text size
+- Themes: **Dark** and **Light** (log pane stays dark for readability)
+- Use browser zoom (`Ctrl` `+` / `Ctrl` `-`) to adjust text size
 - **Learn more** modal with author links (portfolio / GitHub / project)
 
 ### Auth & sessions
@@ -28,20 +31,21 @@ Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming,
 - First-run **setup gate**: create at least one viewer user before logs open
 - Admin panel protected by `LOG_VIEWER_ADMIN_PASSWORD`
 - **Idle timeout: 10 minutes** of no activity (sliding session — activity refreshes it)
-- On timeout, viewer and admin both show: *Session timed out due to inactivity. Please sign in again.*
+- Process restart invalidates existing sessions
+- On timeout / restart, viewer and admin show a clear re-login message
 
 ### Admin (`/admin`)
-- Namespace **include** or **exclude** mode
-- Pin specific apps (`namespace/Kind/name`) or show all in allowed namespaces
+- Namespace **include** or **exclude** mode (lists namespaces live from the cluster)
+- Optional app pins (`namespace/Kind/name`); empty pins = all apps in allowed namespaces
 - Workload kinds toggles + Select all / Unselect all
 - Viewer users: generate strong password, show/hide, copy
 - Display title editable
 - **About / branding is read-only** (locked to author details)
-- Themes shared with the viewer (`lv_theme`)
 - **Save & apply now** — config persists and syncs across replicas via ConfigMap
+- Banner when pinned apps are limiting the live viewer
 
 ### Platform
-- In-cluster Kubernetes client (ServiceAccount + RBAC)
+- In-cluster Kubernetes client (ServiceAccount + ClusterRole)
 - Deployment → ReplicaSet → Pod ownership (avoids mixing CronJob/worker pods)
 - PVC for config + optional ConfigMap sync for multi-replica
 - Structured pod logs: login, timeouts, workloads, log streams, HTTP access
@@ -87,6 +91,11 @@ Then open:
 2. Create at least one **enabled** viewer user (generate + copy password)
 3. Choose namespaces / apps / kinds → **Save & apply now**
 4. Sign in at `/login` and stream logs
+
+**Admin filter rules**
+- **Namespaces** control which namespaces are in scope
+- **Pinned apps** (Apps tab), if any, further limit the viewer to only those apps
+- Clear all pins + Save to show every app in the selected namespaces
 
 ---
 
@@ -144,7 +153,7 @@ Stored on the PVC as `config.json` and synced to ConfigMap when enabled:
 
 - `mode`: `include` \| `exclude`
 - `include` / `exclude`: namespace lists
-- `allowedWorkloads`: pinned apps (`dev/Deployment/api`)
+- `allowedWorkloads`: pinned apps (`dev/Deployment/api`); empty = all apps in allowed namespaces
 - `workloads`: which kinds to show
 - `users`: viewer accounts (hashes only persisted)
 - `title`: viewer header title
@@ -168,11 +177,13 @@ Browser ──► Log Viewer (Go) ──► Kubernetes API
 - **Entry:** `cmd/log-viewer`
 - **Packages:** `internal/viewer`, `internal/admin`, `internal/auth`, `internal/config`, `internal/k8s`, `internal/syncer`
 
+Namespaces and workloads are discovered **dynamically** from the cluster API on each request (subject to Admin filters and ServiceAccount RBAC).
+
 ---
 
 ## Local development
 
-Needs Go **1.25+** and cluster access (`KUBECONFIG` or in-cluster).
+Needs Go **1.22+** and cluster access (`KUBECONFIG` or in-cluster).
 
 ```bash
 export LOG_VIEWER_ADMIN_PASSWORD=devadmin

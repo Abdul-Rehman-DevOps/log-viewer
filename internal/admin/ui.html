@@ -9,44 +9,14 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root,[data-theme="dark"]{
-  --bg:#12141a;--panel:#1a1d26;--border:#2c313c;--text:#d8dde6;--muted:#8a919e;
-  --accent:#8b9bb4;--accent-text:#12141a;--danger:#c97a82;--ok:#7d9e8a;--nav:#0e1014;
-  --chip:#22262f;--input:#0e1014;--shadow:0 12px 32px rgba(0,0,0,.28);--link:#a7b4c7;
+  --bg:#0f1419;--panel:#151b23;--border:#2a3441;--text:#d1d5db;--muted:#6b7280;
+  --accent:#14b8a6;--accent-text:#042f2e;--danger:#f87171;--ok:#4ade80;--nav:#0b0e14;
+  --chip:#1a222d;--input:#0b0e14;--shadow:0 12px 32px rgba(0,0,0,.35);--link:#22d3ee;
 }
 [data-theme="light"]{
-  --bg:#eceae6;--panel:#f7f5f1;--border:#d5d0c8;--text:#2a2d33;--muted:#6f737a;
-  --accent:#4a5563;--accent-text:#f7f5f1;--danger:#9b4d52;--ok:#3f6b56;--nav:#e8e4de;
-  --chip:#e4e0d9;--input:#faf8f5;--shadow:0 12px 28px rgba(40,36,30,.08);--link:#3d5a73;
-}
-[data-theme="midnight"]{
-  --bg:#0f1218;--panel:#171b24;--border:#2a3140;--text:#cfd6e2;--muted:#8490a3;
-  --accent:#6d7f99;--accent-text:#0f1218;--danger:#b87a80;--ok:#6f9482;--nav:#0b0e13;
-  --chip:#1e2430;--input:#0b0e13;--shadow:0 12px 32px rgba(0,0,0,.35);--link:#9aabbf;
-}
-[data-theme="solarized"]{
-  --bg:#1c2428;--panel:#243033;--border:#3a484c;--text:#d6d0c2;--muted:#8f9794;
-  --accent:#9a8f6e;--accent-text:#1c2428;--danger:#b0706c;--ok:#7a9470;--nav:#161d20;
-  --chip:#2c393d;--input:#161d20;--shadow:0 12px 32px rgba(0,0,0,.3);--link:#7a9aa3;
-}
-[data-theme="nord"]{
-  --bg:#2a3038;--panel:#343b45;--border:#4a5260;--text:#e1e5eb;--muted:#9aa3b0;
-  --accent:#7d8fa3;--accent-text:#2a3038;--danger:#b08086;--ok:#87a090;--nav:#242930;
-  --chip:#3c4450;--input:#242930;--shadow:0 12px 32px rgba(0,0,0,.28);--link:#9aabba;
-}
-[data-theme="forest"]{
-  --bg:#141816;--panel:#1b211e;--border:#2e3832;--text:#d5ddd6;--muted:#879189;
-  --accent:#6f8578;--accent-text:#141816;--danger:#b07e7e;--ok:#6e8f7a;--nav:#101412;
-  --chip:#232a26;--input:#101412;--shadow:0 12px 32px rgba(0,0,0,.3);--link:#95a89c;
-}
-[data-theme="crimson"]{
-  --bg:#161314;--panel:#1f1a1c;--border:#3a3033;--text:#e4d9db;--muted:#9a8b8e;
-  --accent:#9a6b72;--accent-text:#161314;--danger:#c08086;--ok:#7a9482;--nav:#110e10;
-  --chip:#292224;--input:#110e10;--shadow:0 12px 32px rgba(0,0,0,.32);--link:#b89aa0;
-}
-[data-theme="mono"]{
-  --bg:#141414;--panel:#1c1c1c;--border:#333;--text:#e0e0e0;--muted:#8c8c8c;
-  --accent:#b0b0b0;--accent-text:#141414;--danger:#c4c4c4;--ok:#9c9c9c;--nav:#0f0f0f;
-  --chip:#262626;--input:#0f0f0f;--shadow:0 12px 32px rgba(0,0,0,.4);--link:#c4c4c4;
+  --bg:#f1f5f9;--panel:#ffffff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;
+  --accent:#0f766e;--accent-text:#f0fdfa;--danger:#dc2626;--ok:#16a34a;--nav:#ffffff;
+  --chip:#f1f5f9;--input:#f8fafc;--shadow:0 12px 28px rgba(15,23,42,.06);--link:#0369a1;
 }
 *{box-sizing:border-box}
 body{
@@ -65,8 +35,18 @@ header{
 }
 .brand{display:flex;gap:.75rem;align-items:center}.brand img{width:40px;height:40px;border-radius:8px;box-shadow:var(--shadow)}
 .brand strong{font-size:1.12rem;font-weight:600}.pill{font-size:.68rem;padding:.12rem .45rem;border-radius:4px;background:var(--chip);color:var(--muted);margin-left:.4rem;border:1px solid var(--border);letter-spacing:.04em;text-transform:uppercase}
-.header-actions{display:flex;gap:.5rem;align-items:center}
-.header-actions select{background:var(--input);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.45rem .6rem;font-size:.8rem}
+.header-actions{display:flex;gap:.45rem;align-items:center}
+.header-actions select,
+.header-actions a.btn,
+.header-actions button{
+  height:34px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
+  padding:0 .85rem;font-size:.8rem;font-weight:560;line-height:1;white-space:nowrap;
+  border-radius:6px;margin:0
+}
+.header-actions select{
+  background:transparent;border:1px solid var(--border);color:var(--text);padding-right:1.5rem
+}
+.header-actions select:hover{background:color-mix(in srgb,var(--accent) 8%, transparent)}
 a.btn,button{
   border:0;border-radius:6px;padding:.58rem 1rem;font-weight:600;cursor:pointer;
   background:var(--accent);color:var(--accent-text);text-decoration:none;display:inline-flex;
@@ -74,6 +54,7 @@ a.btn,button{
 }
 a.btn:hover,button:hover{opacity:.92}
 button.secondary,a.secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+.header-actions a.secondary,.header-actions button.secondary{background:transparent}
 button.icon{padding:.4rem .55rem;min-width:2.1rem;justify-content:center}
 .layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 72px)}
 nav{background:var(--nav);border-right:1px solid var(--border);padding:.85rem .7rem}
@@ -116,16 +97,7 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.55rem .
 <header>
   <div class="brand"><img src="/assets/logo.png" alt=""/><div><strong>Log Viewer <span class="pill">Admin</span></strong></div></div>
   <div class="header-actions">
-    <select id="themeSel" aria-label="Theme" title="Theme">
-      <option value="dark">Obsidian</option>
-      <option value="light">Paper</option>
-      <option value="midnight">Ink</option>
-      <option value="solarized">Dusk</option>
-      <option value="nord">Mist</option>
-      <option value="forest">Moss</option>
-      <option value="crimson">Garnet</option>
-      <option value="mono">Graphite</option>
-    </select>
+    <button type="button" class="secondary" id="themeBtn" title="Toggle theme" aria-label="Toggle theme" style="width:34px;padding:0;font-size:1rem">☀</button>
     <a class="btn secondary" href="/">Open viewer</a>
     <button class="secondary hidden" id="btnLogout" type="button">Logout</button>
   </div>
@@ -154,10 +126,13 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.55rem .
       <div class="stat"><b id="statUsers">—</b><span>Viewer users</span></div>
       <div class="stat"><b id="statApps">—</b><span>Pinned apps</span></div>
     </div>
+    <div id="filterBanner" class="card" style="padding:.85rem 1.1rem;margin-bottom:1rem;border-color:color-mix(in srgb,var(--accent) 45%, var(--border));display:none">
+      <p class="help" style="margin:0" id="filterBannerText"></p>
+    </div>
 
     <div class="card tab" id="tab-ns">
       <h2>Namespaces</h2>
-      <p class="help">Choose what the viewer can see. Changes apply immediately and sync across replicas.</p>
+      <p class="help">Choose which namespaces the viewer can see. Save applies immediately. If Apps are pinned, the viewer still only shows those pinned apps inside these namespaces.</p>
       <div class="modes">
         <label class="row"><input type="radio" name="mode" value="exclude"/> <strong>Exclude</strong> — all except selected</label>
         <label class="row"><input type="radio" name="mode" value="include"/> <strong>Include</strong> — only selected</label>
@@ -171,12 +146,16 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:.55rem .
 
     <div class="card tab hidden" id="tab-apps">
       <h2>Specific Deployments / StatefulSets</h2>
-      <p class="help">Pin exact apps per namespace. Leave empty to show all apps in allowed namespaces.</p>
+      <p class="help">
+        <strong>Optional filter.</strong> Leave empty to show <em>all</em> apps in the allowed namespaces.
+        If you pin apps, the live viewer shows <em>only</em> those pins — selecting more namespaces will not add other apps until you clear pins.
+      </p>
       <div class="field"><span>Namespace</span><select id="appNs"></select></div>
       <div class="actions">
         <button type="button" class="secondary" id="btnLoadApps">Load apps</button>
         <button type="button" class="secondary" id="btnAppsAll">Select all loaded</button>
         <button type="button" class="secondary" id="btnAppsClear">Clear this namespace</button>
+        <button type="button" class="secondary" id="btnAppsClearAll">Clear all pins</button>
       </div>
       <div id="appPick" class="wl-pick" style="margin-top:.8rem"></div>
       <p class="help" id="allowedCount" style="margin-top:.8rem;margin-bottom:0"></p>

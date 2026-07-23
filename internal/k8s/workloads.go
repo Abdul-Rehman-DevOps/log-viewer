@@ -48,70 +48,69 @@ func (c *Client) ListWorkloadsRaw(ctx context.Context, cfg config.Settings, name
 }
 
 func (c *Client) listWorkloads(ctx context.Context, cfg config.Settings, namespaces []string, applyAllowlist bool) ([]Workload, error) {
+	if applyAllowlist {
+		namespaces = config.FilterNamespacesForScan(cfg, namespaces)
+	}
 	var out []Workload
 	for _, ns := range namespaces {
 		if cfg.Workloads.Deployments {
 			list, err := c.cs.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			for _, d := range list.Items {
-				if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "Deployment", d.Name) {
-					continue
+			if err == nil {
+				for _, d := range list.Items {
+					if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "Deployment", d.Name) {
+						continue
+					}
+					pods, ready := podsForDeployment(ctx, c.cs, ns, d.UID)
+					out = append(out, Workload{
+						Kind: "Deployment", Namespace: ns, Name: d.Name,
+						Replicas: deref(d.Spec.Replicas), Ready: ready, Pods: pods,
+					})
 				}
-				pods, ready := podsForDeployment(ctx, c.cs, ns, d.UID)
-				out = append(out, Workload{
-					Kind: "Deployment", Namespace: ns, Name: d.Name,
-					Replicas: deref(d.Spec.Replicas), Ready: ready, Pods: pods,
-				})
 			}
 		}
 		if cfg.Workloads.StatefulSets {
 			list, err := c.cs.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			for _, st := range list.Items {
-				if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "StatefulSet", st.Name) {
-					continue
+			if err == nil {
+				for _, st := range list.Items {
+					if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "StatefulSet", st.Name) {
+						continue
+					}
+					pods, ready := podsOwnedBy(ctx, c.cs, ns, "StatefulSet", st.UID)
+					out = append(out, Workload{
+						Kind: "StatefulSet", Namespace: ns, Name: st.Name,
+						Replicas: deref(st.Spec.Replicas), Ready: ready, Pods: pods,
+					})
 				}
-				pods, ready := podsOwnedBy(ctx, c.cs, ns, "StatefulSet", st.UID)
-				out = append(out, Workload{
-					Kind: "StatefulSet", Namespace: ns, Name: st.Name,
-					Replicas: deref(st.Spec.Replicas), Ready: ready, Pods: pods,
-				})
 			}
 		}
 		if cfg.Workloads.DaemonSets {
 			list, err := c.cs.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			for _, d := range list.Items {
-				if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "DaemonSet", d.Name) {
-					continue
+			if err == nil {
+				for _, d := range list.Items {
+					if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "DaemonSet", d.Name) {
+						continue
+					}
+					pods, ready := podsOwnedBy(ctx, c.cs, ns, "DaemonSet", d.UID)
+					out = append(out, Workload{
+						Kind: "DaemonSet", Namespace: ns, Name: d.Name,
+						Replicas: d.Status.DesiredNumberScheduled, Ready: ready, Pods: pods,
+					})
 				}
-				pods, ready := podsOwnedBy(ctx, c.cs, ns, "DaemonSet", d.UID)
-				out = append(out, Workload{
-					Kind: "DaemonSet", Namespace: ns, Name: d.Name,
-					Replicas: d.Status.DesiredNumberScheduled, Ready: ready, Pods: pods,
-				})
 			}
 		}
 		if cfg.Workloads.Jobs {
 			list, err := c.cs.BatchV1().Jobs(ns).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			for _, j := range list.Items {
-				if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "Job", j.Name) {
-					continue
+			if err == nil {
+				for _, j := range list.Items {
+					if applyAllowlist && !config.WorkloadAllowed(cfg, ns, "Job", j.Name) {
+						continue
+					}
+					pods, ready := podsOwnedBy(ctx, c.cs, ns, "Job", j.UID)
+					out = append(out, Workload{
+						Kind: "Job", Namespace: ns, Name: j.Name,
+						Replicas: 1, Ready: ready, Pods: pods,
+					})
 				}
-				pods, ready := podsOwnedBy(ctx, c.cs, ns, "Job", j.UID)
-				out = append(out, Workload{
-					Kind: "Job", Namespace: ns, Name: j.Name,
-					Replicas: 1, Ready: ready, Pods: pods,
-				})
 			}
 		}
 	}
@@ -226,7 +225,8 @@ func (c *Client) StreamPodsLogs(ctx context.Context, namespace string, pods []st
 	flusher, _ := w.(http.Flusher)
 	var writeMu sync.Mutex
 	writeLine := func(pod string, raw []byte) error {
-		formatted := formatLogLine(raw, pod, len(pods) > 1)
+		// Always prefix pod name so colored source badges work for single- and multi-pod streams.
+		formatted := formatLogLine(raw, pod, true)
 		writeMu.Lock()
 		defer writeMu.Unlock()
 		if _, err := w.Write(formatted); err != nil {
@@ -311,13 +311,8 @@ func (c *Client) streamOne(ctx context.Context, namespace, pod, container string
 }
 
 var (
-	ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[@-Z\\-_]`)
-	isoRe  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
+	isoRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
 )
-
-func stripANSI(s string) string {
-	return ansiRe.ReplaceAllString(s, "")
-}
 
 func toPKTString(s string) string {
 	return isoRe.ReplaceAllStringFunc(s, func(m string) string {
@@ -332,31 +327,32 @@ func toPKTString(s string) string {
 	})
 }
 
-// formatLogLine converts leading RFC3339 timestamp to PKT, strips ANSI, optionally prefixes pod.
+// formatLogLine converts leading RFC3339 timestamp to PKT and optionally prefixes pod.
+// ANSI color codes in the message body are preserved for the viewer to render.
 func formatLogLine(raw []byte, pod string, withPod bool) []byte {
 	line := bytes.TrimRight(raw, "\r\n")
-	msg := toPKTString(stripANSI(string(line)))
-	tsStr, rest, ok := splitTimestamp(msg)
+	msg := string(line)
 	var out strings.Builder
 	if withPod {
 		out.WriteString("[")
 		out.WriteString(shortPod(pod))
 		out.WriteString("] ")
 	}
+	tsStr, rest, ok := splitTimestamp(msg)
 	if ok && strings.Contains(tsStr, "T") {
 		if t, err := time.Parse(time.RFC3339Nano, tsStr); err == nil {
 			out.WriteString(t.In(pktZone).Format("2006-01-02 15:04:05.000 PKT"))
 			out.WriteString(" ")
-			out.WriteString(strings.TrimSpace(rest))
+			out.WriteString(strings.TrimLeft(rest, " "))
 		} else if t, err := time.Parse(time.RFC3339, tsStr); err == nil {
 			out.WriteString(t.In(pktZone).Format("2006-01-02 15:04:05.000 PKT"))
 			out.WriteString(" ")
-			out.WriteString(strings.TrimSpace(rest))
+			out.WriteString(strings.TrimLeft(rest, " "))
 		} else {
-			out.WriteString(msg)
+			out.WriteString(toPKTString(msg))
 		}
 	} else {
-		out.WriteString(msg)
+		out.WriteString(toPKTString(msg))
 	}
 	out.WriteByte('\n')
 	return []byte(out.String())

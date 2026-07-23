@@ -8,11 +8,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
-:root,[data-theme=dark]{--bg:#12141a;--panel:#1a1d26;--border:#2c313c;--text:#d8dde6;--muted:#8a919e;--accent:#8b9bb4;--accent-text:#12141a;--err:#c97a82}
-[data-theme=light]{--bg:#eceae6;--panel:#f7f5f1;--border:#d5d0c8;--text:#2a2d33;--muted:#6f737a;--accent:#4a5563;--accent-text:#f7f5f1;--err:#9b4d52}
+:root,[data-theme=dark]{--bg:#0f1419;--panel:#151b23;--border:#2a3441;--text:#d1d5db;--muted:#6b7280;--accent:#14b8a6;--accent-text:#042f2e;--err:#f87171}
+[data-theme=light]{--bg:#f1f5f9;--panel:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--accent:#0f766e;--accent-text:#f0fdfa;--err:#dc2626}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:"IBM Plex Sans",system-ui,sans-serif;color:var(--text);background:var(--bg)}
 .card{width:min(400px,92vw);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1.5rem;position:relative}
-.theme{position:absolute;top:.75rem;right:.75rem;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:6px;padding:.25rem .5rem;cursor:pointer}
+.theme{position:absolute;top:.75rem;right:.75rem;width:30px;height:30px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:6px;padding:0;cursor:pointer;font-size:1rem}
 .brand{display:flex;gap:.75rem;align-items:center;margin-bottom:1.1rem}
 .brand img{width:44px;height:44px;border-radius:8px}.brand strong{font-size:1.25rem;font-weight:600}
 label{font-size:.9rem;color:var(--muted)}
@@ -22,7 +22,7 @@ button.go{width:100%;border:0;border-radius:6px;padding:.75rem;font-weight:600;b
 </style></head>
 <body>
 <div class="card">
-  <button class="theme" id="themeBtn" type="button">☀</button>
+  <button class="theme" id="themeBtn" type="button" title="Toggle theme">☀</button>
   <div class="brand"><img src="/assets/logo.png" alt=""/><strong>Log Viewer</strong></div>
   <label>Username</label><input id="u" autocomplete="username"/>
   <label>Password</label><input id="p" type="password" autocomplete="current-password"/>
@@ -30,18 +30,26 @@ button.go{width:100%;border:0;border-radius:6px;padding:.75rem;font-weight:600;b
   <div class="err" id="err"></div>
 </div>
 <script>
-function applyTheme(theme){document.documentElement.setAttribute("data-theme",theme);localStorage.setItem("lv_theme",theme);document.getElementById("themeBtn").textContent=theme==="dark"?"☀":"☾";}
+function normalizeTheme(t){return (t==="light"||t==="nord-light"||t==="solarized-light")?"light":"dark";}
+function applyTheme(theme){
+  theme=normalizeTheme(theme);
+  document.documentElement.setAttribute("data-theme",theme);
+  localStorage.setItem("lv_theme",theme);
+  const btn=document.getElementById("themeBtn");
+  btn.textContent=theme==="dark"?"☀":"☾";
+  btn.title=theme==="dark"?"Switch to light":"Switch to dark";
+}
 applyTheme(localStorage.getItem("lv_theme")||"dark");
-document.getElementById("themeBtn").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
+document.getElementById("themeBtn").onclick=()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  applyTheme(cur==="dark"?"light":"dark");
+};
 (function(){
   const err=document.getElementById("err");
   const q=new URLSearchParams(location.search);
   const reason=q.get("reason")||(sessionStorage.getItem("lv_timeout")==="1"?"timeout":sessionStorage.getItem("lv_restart")==="1"?"restart":"");
-  if(reason==="timeout"){
-    err.textContent="Session timed out due to inactivity. Please sign in again.";
-  }else if(reason==="restart"){
-    err.textContent="Session ended because Log Viewer restarted. Please sign in again.";
-  }
+  if(reason==="timeout") err.textContent="Session timed out due to inactivity. Please sign in again.";
+  else if(reason==="restart") err.textContent="Session ended because Log Viewer restarted. Please sign in again.";
   sessionStorage.removeItem("lv_timeout");
   sessionStorage.removeItem("lv_restart");
 })();

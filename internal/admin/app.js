@@ -9,7 +9,27 @@ let branding = {
   repoUrl: "https://github.com/Abdul-Rehman-DevOps/log-viewer"
 };
 
-const THEMES = ["dark", "light", "midnight", "solarized", "nord", "forest", "crimson", "mono"];
+function normalizeTheme(theme) {
+  if (theme === "light" || theme === "nord-light" || theme === "solarized-light") return "light";
+  return "dark";
+}
+
+function applyTheme(theme) {
+  theme = normalizeTheme(theme);
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("lv_theme", theme);
+  const btn = $("themeBtn");
+  if (btn) {
+    btn.textContent = theme === "dark" ? "☀" : "☾";
+    btn.title = theme === "dark" ? "Switch to light" : "Switch to dark";
+  }
+}
+applyTheme(localStorage.getItem("lv_theme") || "dark");
+$("themeBtn").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  applyTheme(cur === "dark" ? "light" : "dark");
+};
+
 const IDLE_MS = 10 * 60 * 1000;
 let idleTimer = null;
 let lastPing = 0;
@@ -75,15 +95,6 @@ function bumpActivity() {
 ["mousemove", "keydown", "click", "scroll", "touchstart"].forEach((ev) => {
   document.addEventListener(ev, bumpActivity, { passive: true });
 });
-
-function applyTheme(theme) {
-  if (!THEMES.includes(theme)) theme = "dark";
-  document.documentElement.setAttribute("data-theme", theme);
-  localStorage.setItem("lv_theme", theme);
-  if ($("themeSel")) $("themeSel").value = theme;
-}
-applyTheme(localStorage.getItem("lv_theme") || "dark");
-$("themeSel").onchange = () => applyTheme($("themeSel").value);
 
 async function api(path, opts = {}) {
   const res = await fetch(path, Object.assign({
@@ -268,8 +279,25 @@ function renderAppPick() {
 
 function updateAllowedCount() {
   $("allowedCount").textContent = allowedWorkloads.length
-    ? ("Pinned apps: " + allowedWorkloads.length)
+    ? ("Pinned apps: " + allowedWorkloads.length + " — live viewer shows ONLY these (not every app in selected namespaces).")
     : "No pinned apps — viewer shows all apps in allowed namespaces.";
+  updateFilterBanner();
+}
+
+function updateFilterBanner() {
+  const banner = $("filterBanner");
+  const text = $("filterBannerText");
+  if (!banner || !text) return;
+  const pins = allowedWorkloads.length;
+  if (pins > 0) {
+    banner.style.display = "block";
+    text.innerHTML = "<strong>Live viewer is limited by " + pins + " pinned apps.</strong> " +
+      "Selecting more namespaces alone will not show other deployments. " +
+      "Go to <em>Apps</em> → <strong>Clear all pins</strong> → <strong>Save &amp; apply now</strong> to show everything in selected namespaces.";
+  } else {
+    banner.style.display = "none";
+    text.textContent = "";
+  }
 }
 
 function updateStats() {
@@ -278,6 +306,7 @@ function updateStats() {
   $("statNs").textContent = m === "include" ? String(selected.length) : ("all − " + selected.length);
   $("statUsers").textContent = String(users.filter((u) => u.enabled !== false).length);
   $("statApps").textContent = String(allowedWorkloads.length);
+  updateFilterBanner();
 }
 
 function linkBox(id, url) {
@@ -421,6 +450,12 @@ $("btnAppsClear").onclick = () => {
   renderAppPick();
   updateStats();
 };
+$("btnAppsClearAll").onclick = () => {
+  allowedWorkloads = [];
+  renderAppPick();
+  updateStats();
+  setStatus("All pins cleared (not saved yet — click Save & apply now).", true);
+};
 
 $("btnSave").onclick = async () => {
   const rows = [...document.querySelectorAll("#users tr")];
@@ -464,7 +499,16 @@ $("btnSave").onclick = async () => {
   setStatus("Applying…", true);
   try {
     const res = await api("/api/admin/config", { method: "PUT", body: JSON.stringify(body) });
-    setStatus(res.applied !== false ? "Applied in realtime." : ("Saved with warning: " + res.warning), res.applied !== false);
+    const pins = allowedWorkloads.length;
+    let msg = res.applied !== false ? "Applied in realtime." : ("Saved with warning: " + res.warning);
+    if (res.applied !== false) {
+      if (pins > 0) {
+        msg = "Applied. Live viewer shows " + pins + " pinned app(s) only inside selected namespaces.";
+      } else {
+        msg = "Applied. Live viewer shows all apps in selected namespaces.";
+      }
+    }
+    setStatus(msg, res.applied !== false);
     await load();
   } catch (e) { setStatus(e.message, false); }
 };

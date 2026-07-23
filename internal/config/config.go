@@ -276,12 +276,52 @@ func WorkloadAllowed(cfg Settings, namespace, kind, name string) bool {
 		return true
 	}
 	key := WorkloadKey(namespace, kind, name)
+	keyFold := strings.ToLower(key)
 	for _, k := range cfg.AllowedWorkloads {
-		if k == key {
+		if k == key || strings.EqualFold(k, key) || strings.ToLower(k) == keyFold {
 			return true
 		}
 	}
 	return false
+}
+
+// NamespacesReferencedByPins returns unique namespaces that appear in AllowedWorkloads.
+// Empty pin list → nil (caller should use all resolved namespaces).
+func NamespacesReferencedByPins(cfg Settings) []string {
+	if len(cfg.AllowedWorkloads) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, k := range cfg.AllowedWorkloads {
+		parts := strings.SplitN(k, "/", 3)
+		if len(parts) < 1 || parts[0] == "" {
+			continue
+		}
+		ns := parts[0]
+		if _, ok := seen[ns]; ok {
+			continue
+		}
+		seen[ns] = struct{}{}
+		out = append(out, ns)
+	}
+	return out
+}
+
+// FilterNamespacesForScan intersects resolved namespaces with pin namespaces when pins are set.
+func FilterNamespacesForScan(cfg Settings, resolved []string) []string {
+	pins := NamespacesReferencedByPins(cfg)
+	if len(pins) == 0 {
+		return resolved
+	}
+	allowed := toSet(resolved)
+	out := make([]string, 0, len(pins))
+	for _, ns := range pins {
+		if _, ok := allowed[ns]; ok {
+			out = append(out, ns)
+		}
+	}
+	return out
 }
 
 func (s *Store) load() error {
