@@ -6,49 +6,43 @@
 **Repository:** [github.com/Abdul-Rehman-DevOps/log-viewer](https://github.com/Abdul-Rehman-DevOps/log-viewer)  
 **License:** [MIT](LICENSE)
 
-Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming, Admin-controlled access, viewer logins, and branding — without shipping your logs to a third-party SaaS.
+Kubernetes-native log viewer: live multi-pod streams, Admin-scoped discovery, viewer authentication, and ConfigMap-backed multi-replica config. Logs stay in-cluster — no third-party shipping.
+
+Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/abdulrehman770/log-viewer)
 
 ---
 
 ## Features
 
 ### Viewer (`/`)
-- Live logs for **Deployments**, **StatefulSets**, **DaemonSets**, and **Jobs** (kinds are Admin-controlled)
-- Dynamic discovery from the live cluster (namespaces + workloads via the Kubernetes API)
-- Multi-pod stream with colored source badges, timestamps, and level indicators
-- ANSI colors preserved (NestJS / terminal colors render in the log pane)
-- Structured log coloring: JSON, logfmt (`key=value`), and plain text
-- Level highlighting for `ERROR` / `WARN` / `INFO` / `LOG` / `DEBUG`
-- Timestamps shown in **PKT**
-- Always live on workload select (no Start/Stop); scroll up for history; jump-to-latest control
-- Independent sidebar scroller for long workload lists
-- Themes: **Dark** and **Light** (log pane stays dark for readability)
-- Use browser zoom (`Ctrl` `+` / `Ctrl` `-`) to adjust text size
-- **Learn more** modal with author links (portfolio / GitHub / project)
+- Live logs for **Deployments**, **StatefulSets**, **DaemonSets**, and **Jobs** (kinds Admin-controlled)
+- Dynamic discovery via the Kubernetes API (namespaces + workloads)
+- Multi-pod stream with source badges, timestamps (PKT), and level indicators
+- ANSI preserved; structured coloring for JSON, logfmt (`key=value`), and plain text
+- Level highlights: `ERROR` / `WARN` / `INFO` / `LOG` / `DEBUG`
+- Auto-follow on workload select; scroll for history; jump-to-latest
+- Themes: **Dark** / **Light** (log pane always dark)
+- Browser zoom for text size; **Learn more** modal with author links
 
 ### Auth & sessions
-- Viewer users managed in Admin (bcrypt-hashed passwords)
-- First-run **setup gate**: create at least one viewer user before logs open
-- Admin panel protected by `LOG_VIEWER_ADMIN_PASSWORD`
-- **Idle timeout: 8 hours** of no activity (sliding session — activity refreshes it)
-- Session epoch is shared across replicas (secret-derived or `LOG_VIEWER_SESSION_EPOCH`); rotate the secret/env to invalidate all sessions
-- On timeout / restart, viewer and admin show a clear re-login message
+- Viewer users in Admin (bcrypt hashes)
+- Setup gate until at least one viewer user exists
+- Admin gated by `LOG_VIEWER_ADMIN_PASSWORD`
+- Sliding idle TTL **8h**; epoch shared across replicas (`LOG_VIEWER_SESSION_EPOCH` or secret-derived)
+- Clear timeout / invalid-session responses for UI re-login
 
 ### Admin (`/admin`)
-- Namespace **include** or **exclude** mode (lists namespaces live from the cluster)
-- Optional app pins (`namespace/Kind/name`); empty pins = all apps in allowed namespaces
-- Workload kinds toggles + Select all / Unselect all
-- Viewer users: generate strong password, show/hide, copy
-- Display title editable
-- **About / branding is read-only** (locked to author details)
-- **Save & apply now** — config persists and syncs across replicas via ConfigMap
-- Banner when pinned apps are limiting the live viewer
+- Namespace include/exclude (live cluster list)
+- Optional app pins (`namespace/Kind/name`); empty = all apps in allowed namespaces
+- Workload kind toggles; viewer user password tools
+- Editable display title; branding fields locked to author
+- **Save & apply now** — PVC + ConfigMap sync across replicas
 
 ### Platform
-- In-cluster Kubernetes client (ServiceAccount + ClusterRole)
-- Deployment → ReplicaSet → Pod ownership (avoids mixing CronJob/worker pods)
-- PVC for config + optional ConfigMap sync for multi-replica
-- Structured pod logs: login, timeouts, workloads, log streams, HTTP access
+- In-cluster client (ServiceAccount + ClusterRole)
+- Deployment → ReplicaSet → Pod ownership resolution
+- Optional PVC; ConfigMap sync for multi-replica
+- Structured access / auth / stream logs
 
 ---
 
@@ -58,107 +52,83 @@ Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming,
 |---------|------|---------|
 | Viewer | `/` | Live workload logs |
 | Login | `/login` | Viewer sign-in |
-| Setup | `/setup` | Shown until the first viewer user exists |
-| Admin | `/admin` | Namespaces, apps, kinds, users, display |
-| Health | `/api/admin/health` | Simple health / version JSON |
+| Setup | `/setup` | Until first viewer user exists |
+| Admin | `/admin` | Filters, users, display |
+| Health | `/api/admin/health` | Liveness / version |
 
 ---
 
-## Quick start (Helm)
+## Deploy
 
 ```bash
 helm upgrade --install log-viewer ./charts/log-viewer \
   --namespace log-viewer \
   --create-namespace \
-  --set image.repository=YOUR_REGISTRY/log-viewer \
-  --set image.tag=0.5.3 \
+  --set image.repository=abdulrehman770/log-viewer \
+  --set image.tag=latest \
   --set image.pullPolicy=Always \
   --set admin.password='CHANGE_ME_STRONG'
 ```
-
-Port-forward (if Ingress is off):
 
 ```bash
 kubectl -n log-viewer port-forward svc/log-viewer 8080:8080
 ```
 
-Then open:
-- Viewer: http://localhost:8080/
-- Admin: http://localhost:8080/admin
+| Endpoint | Role |
+|----------|------|
+| `http://localhost:8080/` | Viewer |
+| `http://localhost:8080/admin` | Admin |
 
-**First login flow**
-1. Open `/admin` with the bootstrap admin password
-2. Create at least one **enabled** viewer user (generate + copy password)
-3. Choose namespaces / apps / kinds → **Save & apply now**
-4. Sign in at `/login` and stream logs
-
-**Admin filter rules**
-- **Namespaces** control which namespaces are in scope
-- **Pinned apps** (Apps tab), if any, further limit the viewer to only those apps
-- Clear all pins + Save to show every app in the selected namespaces
+Configure namespaces / apps / kinds and at least one enabled viewer user under `/admin`, then authenticate at `/login`. Namespace filters set scope; pinned apps (if any) further restrict the workload list.
 
 ---
 
-## Build & push image
+## Build
 
 ```bash
 docker build -t YOUR_REGISTRY/log-viewer:0.5.3 .
 docker push YOUR_REGISTRY/log-viewer:0.5.3
 ```
 
-Example (ECR):
-
-```bash
-docker build -t 390866253661121.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:latest .
-docker push 390866253661121.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:latest
-```
+Point the chart at your registry with `image.repository` / `image.tag`, or use the published image in **Deploy** above.
 
 ---
 
 ## Configuration
 
-### Environment variables
+### Environment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOG_VIEWER_LISTEN` | `:8080` | HTTP listen address |
-| `LOG_VIEWER_DATA` | `/data` | Persistent data directory |
-| `LOG_VIEWER_CONFIG` | `$DATA/config.json` | Settings file path |
-| `LOG_VIEWER_ASSETS` | `/etc/log-viewer/branding` | Static assets (logo, etc.) |
-| `LOG_VIEWER_ADMIN_PASSWORD` | _(empty)_ | Admin panel password (empty = open admin, **dev only**) |
-| `LOG_VIEWER_SESSION_SECRET` | falls back to admin password | Signs session cookies |
-| `LOG_VIEWER_SESSION_EPOCH` | derived from session secret | Shared session generation; bump to force logout-all |
-| `LOG_VIEWER_CONFIGMAP` | _(empty)_ | ConfigMap name for multi-replica sync |
-| `POD_NAMESPACE` | _(empty)_ | Namespace of the ConfigMap (set by Helm downward API) |
+| `LOG_VIEWER_LISTEN` | `:8080` | Listen address |
+| `LOG_VIEWER_DATA` | `/data` | Data directory |
+| `LOG_VIEWER_CONFIG` | `$DATA/config.json` | Config path |
+| `LOG_VIEWER_ASSETS` | `/etc/log-viewer/branding` | Static assets |
+| `LOG_VIEWER_ADMIN_PASSWORD` | _(empty)_ | Admin password (empty = open admin, **dev only**) |
+| `LOG_VIEWER_SESSION_SECRET` | admin password fallback | Cookie HMAC key |
+| `LOG_VIEWER_SESSION_EPOCH` | derived from session secret | Shared gen; bump to invalidate all sessions |
+| `LOG_VIEWER_CONFIGMAP` | _(empty)_ | Multi-replica ConfigMap name |
+| `POD_NAMESPACE` | _(empty)_ | ConfigMap namespace (downward API) |
 | `KUBECONFIG` | in-cluster | Optional local kubeconfig |
 
-### Helm values (high level)
+### Helm (summary)
 
 | Key | Notes |
 |-----|--------|
 | `image.repository` / `image.tag` | Container image |
-| `replicaCount` | Default `4` (uses ConfigMap sync; PVC off by default) |
-| `admin.password` | Bootstrap Admin password |
-| `admin.existingSecret` | Optional existing Secret instead of chart Secret |
-| `seedConfig` | Initial config when PVC has no `config.json` yet |
-| `rbac.clusterWide` | ClusterRole for listing namespaces + reading pods/logs |
+| `replicaCount` | Default `4` (ConfigMap sync; PVC off by default) |
+| `admin.password` / `admin.existingSecret` | Bootstrap Admin credentials |
+| `seedConfig` | Initial config when `/data/config.json` is absent |
+| `rbac.clusterWide` | ClusterRole for namespaces / pods / logs |
 | `persistence.*` | PVC for `/data` |
 | `ingress.*` | Optional Ingress |
-| `resources` | CPU/memory requests & limits |
+| `resources` | Requests / limits |
 
-See [`charts/log-viewer/values.yaml`](charts/log-viewer/values.yaml) for the full list.
+Full list: [`charts/log-viewer/values.yaml`](charts/log-viewer/values.yaml).
 
-### Runtime config (Admin)
+### Runtime config
 
-Stored on the PVC as `config.json` and synced to ConfigMap when enabled:
-
-- `mode`: `include` \| `exclude`
-- `include` / `exclude`: namespace lists
-- `allowedWorkloads`: pinned apps (`dev/Deployment/api`); empty = all apps in allowed namespaces
-- `workloads`: which kinds to show
-- `users`: viewer accounts (hashes only persisted)
-- `title`: viewer header title
-- Branding fields exist in config but **cannot be changed from Admin** (server-locked)
+Persisted as `config.json` (and ConfigMap when enabled): `mode`, `include` / `exclude`, `allowedWorkloads`, `workloads`, `users` (hashes only), `title`. Branding fields are server-locked.
 
 ---
 
@@ -167,9 +137,9 @@ Stored on the PVC as `config.json` and synced to ConfigMap when enabled:
 ```
 Browser ──► Log Viewer (Go) ──► Kubernetes API
                  │
-                 ├─ /           viewer UI (embedded HTML/JS)
+                 ├─ /           viewer UI (embedded)
                  ├─ /admin      admin UI
-                 ├─ /api/*      auth + workloads + log stream
+                 ├─ /api/*      auth, workloads, log stream
                  ├─ PVC /data   config.json
                  └─ ConfigMap   multi-replica sync (optional)
 ```
@@ -178,13 +148,13 @@ Browser ──► Log Viewer (Go) ──► Kubernetes API
 - **Entry:** `cmd/log-viewer`
 - **Packages:** `internal/viewer`, `internal/admin`, `internal/auth`, `internal/config`, `internal/k8s`, `internal/syncer`
 
-Namespaces and workloads are discovered **dynamically** from the cluster API on each request (subject to Admin filters and ServiceAccount RBAC).
+Discovery is request-time against the API, constrained by Admin filters and ServiceAccount RBAC.
 
 ---
 
 ## Local development
 
-Needs Go **1.22+** and cluster access (`KUBECONFIG` or in-cluster).
+Requires Go **1.22+** and cluster credentials.
 
 ```bash
 export LOG_VIEWER_ADMIN_PASSWORD=devadmin
@@ -195,70 +165,48 @@ export KUBECONFIG=~/.kube/config
 go run ./cmd/log-viewer -listen :8080
 ```
 
-Open http://localhost:8080/admin then create a viewer user.
-
 ---
 
 ## Operations
-
-### Pod logs
 
 ```bash
 kubectl -n log-viewer logs -f deploy/log-viewer --prefix
 ```
 
-Useful log lines (prefix `log-viewer `):
-
-- startup / listen / idle timeout
-- `viewer login ok` / `admin login ok`
-- `session timeout`
-- `workloads: returned=…`
-- `logs stream start|end`
-- `METHOD /path status duration`
-
-### Upgrade
+Notable lines: startup / idle timeout, `viewer login ok`, `admin login ok`, `session timeout`, `workloads: returned=…`, `logs stream start|end`, HTTP access.
 
 ```bash
-helm upgrade log-viewer ./charts/log-viewer \
-  --namespace log-viewer \
-  --set image.repository=YOUR_REGISTRY/log-viewer \
-  --set image.tag=0.5.3 \
-  --set image.pullPolicy=Always \
-  --reuse-values
+helm upgrade log-viewer ./charts/log-viewer -n log-viewer --reuse-values \
+  --set image.pullPolicy=Always
 ```
-
-### Uninstall
 
 ```bash
 helm uninstall log-viewer -n log-viewer
-# optional: delete PVC / namespace if you want a clean wipe
 ```
 
 ---
 
-## Security notes
+## Security
 
-- Set a strong `admin.password` in production
-- Prefer `admin.existingSecret` over plaintext values in Git
-- Viewer passwords are stored as **bcrypt** hashes
-- Sessions are HMAC-signed cookies; idle expiry is **8 hours** (sliding)
-- Cluster RBAC can list pods and stream logs in selected namespaces — scope cluster access carefully
-- Branding (author links) is intentionally not editable from Admin
+- Strong `admin.password` (prefer `admin.existingSecret` in GitOps)
+- Viewer passwords: bcrypt; sessions: HMAC cookies, **8h** sliding idle
+- RBAC can list pods and stream logs — scope ClusterRole carefully
+- Branding is not Admin-editable by design
 
 ---
 
-## Project layout
+## Layout
 
 ```
-cmd/log-viewer/          main binary
-internal/viewer/         viewer UI + APIs
-internal/admin/          admin UI + APIs
-internal/auth/           sessions / cookies
+cmd/log-viewer/          binary
+internal/viewer/         viewer UI + API
+internal/admin/          admin UI + API
+internal/auth/           sessions
 internal/config/         settings store
-internal/k8s/            workloads + log streaming
+internal/k8s/            workloads + streams
 internal/syncer/         ConfigMap sync
 charts/log-viewer/       Helm chart
-branding/                logo + assets
+branding/                assets
 Dockerfile
 ```
 
@@ -266,9 +214,9 @@ Dockerfile
 
 ## Links
 
-- Portfolio: https://abdulrehman.cz/
-- GitHub profile: https://github.com/Abdul-Rehman-DevOps
-- This project: https://github.com/Abdul-Rehman-DevOps/log-viewer
+- https://abdulrehman.cz/
+- https://github.com/Abdul-Rehman-DevOps/log-viewer
+- https://hub.docker.com/r/abdulrehman770/log-viewer
 
 ---
 
