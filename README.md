@@ -109,8 +109,8 @@ docker push YOUR_REGISTRY/log-viewer:0.5.3
 Example (ECR):
 
 ```bash
-docker build -t 390866253661.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:latest .
-docker push 390866253661.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:latest
+docker build -t 390866253661121.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:latest .
+docker push 390866253661121.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:latest
 ```
 
 ---
@@ -136,7 +136,7 @@ docker push 390866253661.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:lates
 | Key | Notes |
 |-----|--------|
 | `image.repository` / `image.tag` | Container image |
-| `replicaCount` | Default `2` (needs PVC + ConfigMap sync) |
+| `replicaCount` | Default `4` (uses ConfigMap sync; PVC off by default) |
 | `admin.password` | Bootstrap Admin password |
 | `admin.existingSecret` | Optional existing Secret instead of chart Secret |
 | `seedConfig` | Initial config when PVC has no `config.json` yet |
