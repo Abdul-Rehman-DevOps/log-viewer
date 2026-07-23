@@ -2,7 +2,6 @@ package auth
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -20,7 +19,7 @@ const (
 	AdminCookie = "lv_admin"
 	UserCookie  = "lv_session"
 	// SessionTTL is sliding: refreshed on activity; idle beyond this logs the user out.
-	SessionTTL = 10 * time.Minute
+	SessionTTL = 8 * time.Hour
 )
 
 type Session struct {
@@ -49,9 +48,13 @@ type Sessions struct {
 	gen  string
 }
 
-// NewSessions creates a session manager and rotates the restart epoch so existing
-// cookies become invalid after a process restart. When dataDir is set, the epoch
-// is written to session.epoch (shared across replicas on the same volume).
+// NewSessions creates a session manager with a shared restart epoch.
+//
+// Multi-replica note: never mint a random epoch per process — with emptyDir each
+// pod would get a different gen and load-balancing looks like "session restarted".
+// Order: LOG_VIEWER_SESSION_EPOCH env → existing session.epoch file → stable hash
+// of the session secret (all replicas agree). Bump the env or rotate the secret
+// to invalidate all cookies intentionally.
 func NewSessions(dataDir string) *Sessions {
 	sec := os.Getenv("LOG_VIEWER_SESSION_SECRET")
 	if sec == "" {
@@ -61,41 +64,51 @@ func NewSessions(dataDir string) *Sessions {
 		sec = "log-viewer-dev-session-secret"
 	}
 	s := &Sessions{secret: []byte(sec), dataDir: dataDir}
-	s.rotateEpoch()
+	s.loadOrInitEpoch()
 	return s
 }
 
-func (s *Sessions) rotateEpoch() {
-	gen := newEpoch()
+func (s *Sessions) setGen(gen string) {
 	s.mu.Lock()
 	s.gen = gen
 	s.mu.Unlock()
-	if s.dataDir != "" {
-		_ = os.MkdirAll(s.dataDir, 0o755)
-		_ = os.WriteFile(s.epochPath(), []byte(gen+"\n"), 0o600)
+}
+
+func (s *Sessions) loadOrInitEpoch() {
+	if e := strings.TrimSpace(os.Getenv("LOG_VIEWER_SESSION_EPOCH")); e != "" {
+		s.setGen(e)
+		s.persistEpoch(e)
+		return
 	}
+	if s.dataDir != "" {
+		if raw, err := os.ReadFile(s.epochPath()); err == nil {
+			if g := strings.TrimSpace(string(raw)); g != "" {
+				s.setGen(g)
+				return
+			}
+		}
+	}
+	// Stable across replicas without a shared volume.
+	mac := hmac.New(sha256.New, s.secret)
+	_, _ = mac.Write([]byte("log-viewer-session-epoch-v1"))
+	gen := hex.EncodeToString(mac.Sum(nil))
+	s.setGen(gen)
+	s.persistEpoch(gen)
+}
+
+func (s *Sessions) persistEpoch(gen string) {
+	if s.dataDir == "" || gen == "" {
+		return
+	}
+	_ = os.MkdirAll(s.dataDir, 0o755)
+	_ = os.WriteFile(s.epochPath(), []byte(gen+"\n"), 0o600)
 }
 
 func (s *Sessions) epochPath() string {
 	return filepath.Join(s.dataDir, "session.epoch")
 }
 
-func newEpoch() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
-	return hex.EncodeToString(b[:])
-}
-
 func (s *Sessions) currentGen() string {
-	if s.dataDir != "" {
-		if raw, err := os.ReadFile(s.epochPath()); err == nil {
-			if g := strings.TrimSpace(string(raw)); g != "" {
-				return g
-			}
-		}
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.gen

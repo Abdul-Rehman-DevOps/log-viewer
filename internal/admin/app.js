@@ -30,7 +30,8 @@ $("themeBtn").onclick = () => {
   applyTheme(cur === "dark" ? "light" : "dark");
 };
 
-const IDLE_MS = 10 * 60 * 1000;
+// Keep in sync with auth.SessionTTL (8h sliding idle).
+const IDLE_MS = 8 * 60 * 60 * 1000;
 let idleTimer = null;
 let lastPing = 0;
 let sessionGone = false;

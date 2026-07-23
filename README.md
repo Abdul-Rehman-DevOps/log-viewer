@@ -30,8 +30,8 @@ Open-source **Kubernetes log viewer** for any cluster. Live multi-pod streaming,
 - Viewer users managed in Admin (bcrypt-hashed passwords)
 - First-run **setup gate**: create at least one viewer user before logs open
 - Admin panel protected by `LOG_VIEWER_ADMIN_PASSWORD`
-- **Idle timeout: 10 minutes** of no activity (sliding session — activity refreshes it)
-- Process restart invalidates existing sessions
+- **Idle timeout: 8 hours** of no activity (sliding session — activity refreshes it)
+- Session epoch is shared across replicas (secret-derived or `LOG_VIEWER_SESSION_EPOCH`); rotate the secret/env to invalidate all sessions
 - On timeout / restart, viewer and admin show a clear re-login message
 
 ### Admin (`/admin`)
@@ -127,6 +127,7 @@ docker push 390866253661121.dkr.ecr.us-east-2.amazonaws.com/log-viewer/logger:la
 | `LOG_VIEWER_ASSETS` | `/etc/log-viewer/branding` | Static assets (logo, etc.) |
 | `LOG_VIEWER_ADMIN_PASSWORD` | _(empty)_ | Admin panel password (empty = open admin, **dev only**) |
 | `LOG_VIEWER_SESSION_SECRET` | falls back to admin password | Signs session cookies |
+| `LOG_VIEWER_SESSION_EPOCH` | derived from session secret | Shared session generation; bump to force logout-all |
 | `LOG_VIEWER_CONFIGMAP` | _(empty)_ | ConfigMap name for multi-replica sync |
 | `POD_NAMESPACE` | _(empty)_ | Namespace of the ConfigMap (set by Helm downward API) |
 | `KUBECONFIG` | in-cluster | Optional local kubeconfig |
@@ -240,7 +241,7 @@ helm uninstall log-viewer -n log-viewer
 - Set a strong `admin.password` in production
 - Prefer `admin.existingSecret` over plaintext values in Git
 - Viewer passwords are stored as **bcrypt** hashes
-- Sessions are HMAC-signed cookies; idle expiry is **10 minutes**
+- Sessions are HMAC-signed cookies; idle expiry is **8 hours** (sliding)
 - Cluster RBAC can list pods and stream logs in selected namespaces — scope cluster access carefully
 - Branding (author links) is intentionally not editable from Admin
 

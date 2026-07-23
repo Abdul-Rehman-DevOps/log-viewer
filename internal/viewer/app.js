@@ -12,7 +12,8 @@ let about = {
   version: "0.5.3"
 };
 const $ = (id) => document.getElementById(id);
-const IDLE_MS = 10 * 60 * 1000;
+// Keep in sync with auth.SessionTTL (8h sliding idle).
+const IDLE_MS = 8 * 60 * 60 * 1000;
 let idleTimer = null;
 let lastPing = 0;
 let sessionGone = false;
@@ -622,6 +623,7 @@ async function follow(opts) {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      bumpActivity();
       queueChunk(dec.decode(value, { stream: true }));
     }
     flushPending();
