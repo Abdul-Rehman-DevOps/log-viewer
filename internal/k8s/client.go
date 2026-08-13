@@ -16,6 +16,11 @@ type Client struct {
 	cs kubernetes.Interface
 }
 
+// NewWithClientset builds a Client around an existing interface (tests / fakes).
+func NewWithClientset(cs kubernetes.Interface) *Client {
+	return &Client{cs: cs}
+}
+
 func New() (*Client, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {

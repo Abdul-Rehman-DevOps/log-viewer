@@ -218,7 +218,8 @@ func deref(p *int32) int32 {
 
 // StreamPodsLogs follows one or more pods, prefixes each line with pod name when
 // multiple pods are streamed, and rewrites timestamps to Asia/Karachi (PKT).
-func (c *Client) StreamPodsLogs(ctx context.Context, namespace string, pods []string, container string, tail int64, w http.ResponseWriter) error {
+// When previous is true, streams the prior terminated container instance (useful for CrashLoopBackOff).
+func (c *Client) StreamPodsLogs(ctx context.Context, namespace string, pods []string, container string, tail int64, previous bool, w http.ResponseWriter) error {
 	if len(pods) == 0 {
 		return fmt.Errorf("no pods")
 	}
@@ -239,7 +240,7 @@ func (c *Client) StreamPodsLogs(ctx context.Context, namespace string, pods []st
 	}
 
 	if len(pods) == 1 {
-		return c.streamOne(ctx, namespace, pods[0], container, tail, func(line []byte) error {
+		return c.streamOne(ctx, namespace, pods[0], container, tail, previous, func(line []byte) error {
 			return writeLine(pods[0], line)
 		})
 	}
@@ -251,7 +252,7 @@ func (c *Client) StreamPodsLogs(ctx context.Context, namespace string, pods []st
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := c.streamOne(ctx, namespace, pod, container, tail, func(line []byte) error {
+			err := c.streamOne(ctx, namespace, pod, container, tail, previous, func(line []byte) error {
 				return writeLine(pod, line)
 			})
 			if err != nil && ctx.Err() == nil {
@@ -277,11 +278,12 @@ func (c *Client) StreamPodsLogs(ctx context.Context, namespace string, pods []st
 	}
 }
 
-func (c *Client) streamOne(ctx context.Context, namespace, pod, container string, tail int64, onLine func([]byte) error) error {
+func (c *Client) streamOne(ctx context.Context, namespace, pod, container string, tail int64, previous bool, onLine func([]byte) error) error {
 	opts := &corev1.PodLogOptions{
-		Follow:     true,
+		Follow:     !previous, // previous instance is finite — do not follow
 		Timestamps: true,
 		TailLines:  &tail,
+		Previous:   previous,
 	}
 	if container != "" {
 		opts.Container = container

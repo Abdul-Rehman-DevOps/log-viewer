@@ -29,6 +29,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/logout", s.handleLogout)
 	mux.HandleFunc("/api/me", s.handleMe)
 	mux.HandleFunc("/api/workloads", s.requireUser(s.handleWorkloads))
+	mux.HandleFunc("/api/unhealthy-pods", s.requireUser(s.handleUnhealthyPods))
 	mux.HandleFunc("/api/logs", s.requireUser(s.handleLogs))
 	mux.HandleFunc("/api/pods/containers", s.requireUser(s.handleContainers))
 }
@@ -148,7 +149,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"githubUrl":     cfg.GitHubURL,
 		"portfolioUrl":  cfg.PortfolioURL,
 		"repoUrl":       cfg.RepoURL,
-		"version":       "0.5.3",
+		"version":       "0.5.4",
 	}
 	if !needsSetup {
 		id := auth.CookieValue(r, auth.UserCookie)
@@ -201,6 +202,30 @@ func (s *Server) handleWorkloads(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleUnhealthyPods(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cfg := s.Store.Get()
+	all, err := s.K8s.ListNamespaces(ctx)
+	if err != nil {
+		log.Printf("unhealthy-pods: list namespaces: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ns := config.ResolveNamespaces(cfg, all)
+	pods, err := s.K8s.ListUnhealthyPods(ctx, cfg, ns)
+	if err != nil {
+		log.Printf("unhealthy-pods: list: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("unhealthy-pods: returned=%d", len(pods))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"pods":  pods,
+		"count": len(pods),
+	})
+}
+
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 	ns := r.URL.Query().Get("namespace")
 	pod := r.URL.Query().Get("pod")
@@ -229,6 +254,9 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	pod := r.URL.Query().Get("pod")
 	podsParam := r.URL.Query().Get("pods")
 	container := r.URL.Query().Get("container")
+	kind := r.URL.Query().Get("kind")
+	workload := r.URL.Query().Get("workload")
+	previous := r.URL.Query().Get("previous") == "1" || strings.EqualFold(r.URL.Query().Get("previous"), "true")
 	tail, _ := strconv.ParseInt(r.URL.Query().Get("tail"), 10, 64)
 	if tail <= 0 {
 		tail = 100
@@ -266,14 +294,33 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("logs stream start ns=%s pods=%d container=%q tail=%d", ns, len(pods), container, tail)
+	// Enforce Admin allowlist: every pod must belong to an allowed workload.
+	ctxCheck, cancelCheck := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancelCheck()
+	for _, p := range pods {
+		wKind, wName := kind, workload
+		if wKind == "" || wName == "" {
+			resolvedKind, resolvedName, err := s.K8s.ResolvePodWorkload(ctxCheck, ns, p)
+			if err != nil {
+				http.Error(w, "pod not found or not accessible", http.StatusForbidden)
+				return
+			}
+			wKind, wName = resolvedKind, resolvedName
+		}
+		if wKind == "" || wName == "" || !config.WorkloadAllowed(cfg, ns, wKind, wName) {
+			http.Error(w, "workload not allowed", http.StatusForbidden)
+			return
+		}
+	}
+
+	log.Printf("logs stream start ns=%s pods=%d container=%q tail=%d previous=%v", ns, len(pods), container, tail, previous)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
-	err := s.K8s.StreamPodsLogs(r.Context(), ns, pods, container, tail, w)
+	err := s.K8s.StreamPodsLogs(r.Context(), ns, pods, container, tail, previous, w)
 	if err != nil && r.Context().Err() == nil {
 		log.Printf("logs stream error ns=%s: %v", ns, err)
 	} else {

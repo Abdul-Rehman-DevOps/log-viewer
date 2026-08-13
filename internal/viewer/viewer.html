@@ -65,14 +65,53 @@ header.top{flex:0 0 auto;display:flex;align-items:center;justify-content:space-b
 .brand{display:flex;gap:.55rem;align-items:center;min-width:0}.brand img{width:30px;height:30px;border-radius:6px}
 .brand strong{font-size:.95rem;font-weight:600}
 .tools{display:flex;gap:.35rem;align-items:center}
-button.ghost,button.theme-toggle{
+button.ghost,button.theme-toggle,button.alert-btn{
   height:30px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;
   color:var(--text);background:transparent;border:1px solid var(--border);border-radius:6px;
-  padding:0 .65rem;font-size:.8rem;font-family:inherit;line-height:1;white-space:nowrap
+  padding:0 .65rem;font-size:.8rem;font-family:inherit;line-height:1;white-space:nowrap;position:relative
 }
-button.theme-toggle{width:30px;padding:0;font-size:1rem}
-button.ghost:hover,button.theme-toggle:hover{border-color:var(--accent);background:color-mix(in oklch,var(--accent) 12%, transparent)}
+button.theme-toggle,button.alert-btn{width:30px;padding:0;font-size:1rem}
+button.ghost:hover,button.theme-toggle:hover,button.alert-btn:hover{border-color:var(--accent);background:color-mix(in oklch,var(--accent) 12%, transparent)}
+button.alert-btn{color:var(--muted)}
+button.alert-btn.active{
+  color:var(--err);border-color:color-mix(in oklch,var(--err) 55%, var(--border));
+  background:color-mix(in oklch,var(--err) 14%, transparent);
+  animation:alertPulse 1.6s ease-in-out infinite
+}
+button.alert-btn .badge{
+  position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 4px;
+  border-radius:999px;background:var(--err);color:#fff;font-size:.62rem;font-weight:700;
+  display:none;align-items:center;justify-content:center;line-height:1
+}
+button.alert-btn.active .badge{display:inline-flex}
+@keyframes alertPulse{
+  0%,100%{box-shadow:0 0 0 0 color-mix(in oklch,var(--err) 35%, transparent)}
+  50%{box-shadow:0 0 0 5px transparent}
+}
+.side-tabs{flex:0 0 auto;display:flex;gap:.25rem;padding:.45rem .55rem .15rem;border-bottom:1px solid var(--border)}
+.side-tabs button{
+  flex:1;height:30px;border:1px solid transparent;border-radius:6px;background:transparent;
+  color:var(--muted);font:inherit;font-size:.78rem;font-weight:600
+}
+.side-tabs button.active{color:var(--text);background:var(--item-active);border-color:var(--item-active-border)}
+.side-tabs button .tab-count{
+  display:inline-block;margin-left:.3rem;min-width:1.1rem;padding:0 .28rem;border-radius:999px;
+  background:color-mix(in oklch,var(--err) 85%, #000);color:#fff;font-size:.65rem;line-height:1.2
+}
+.side-tabs button:not(.has-alert) .tab-count{display:none}
+.problems-hint{padding:.55rem .7rem;color:var(--muted);font-size:.75rem;line-height:1.4}
+.item.problem{border-left:3px solid var(--err)}
+.item.problem .reason{
+  display:inline-block;margin-top:.2rem;padding:.1rem .4rem;border-radius:4px;
+  font-size:.65rem;font-weight:700;letter-spacing:.02em;
+  background:color-mix(in oklch,var(--err) 18%, transparent);color:var(--err)
+}
+.item.problem.sev-waiting .reason{color:var(--warn);background:color-mix(in oklch,var(--warn) 16%, transparent)}
+.item.problem.sev-error .reason{color:var(--warn);background:color-mix(in oklch,var(--warn) 16%, transparent)}
 #logsSide{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
+#workloadsPanel,#problemsPanel{display:none;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
+#workloadsPanel.active,#problemsPanel.active{display:flex}
+.bar-note{flex:0 0 auto;font-size:.72rem;color:oklch(70% 0 0 / .7);white-space:nowrap}
 .search{flex:0 0 auto;padding:.55rem .75rem;border-bottom:1px solid var(--border)}
 .search input{width:100%;padding:.5rem .65rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:.875rem}
 .list{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:.4rem .5rem .7rem;scrollbar-gutter:stable}
@@ -222,15 +261,29 @@ main{
     <header class="top">
       <div class="brand"><img src="/assets/logo.png" alt=""/><strong id="title">Log Viewer</strong></div>
       <div class="tools">
+        <button type="button" class="alert-btn" id="alertBtn" title="No failing pods" aria-label="Failing pods alert" aria-pressed="false">⚠<span class="badge" id="alertBadge">0</span></button>
         <button type="button" class="theme-toggle" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">☀</button>
         <button class="ghost" id="logout" type="button">Logout</button>
       </div>
     </header>
     <div id="logsSide">
-      <div class="search">
-        <input id="q" placeholder="Filter workloads…" aria-label="Filter workloads"/>
+      <div class="side-tabs" role="tablist" aria-label="Sidebar views">
+        <button type="button" class="active" id="tabWorkloads" role="tab" aria-selected="true">Workloads</button>
+        <button type="button" id="tabProblems" role="tab" aria-selected="false">Problems<span class="tab-count" id="problemsTabCount">0</span></button>
       </div>
-      <div class="list" id="list"><div class="empty">Loading…</div></div>
+      <div id="workloadsPanel" class="active" role="tabpanel">
+        <div class="search">
+          <input id="q" placeholder="Filter workloads…" aria-label="Filter workloads"/>
+        </div>
+        <div class="list" id="list"><div class="empty">Loading…</div></div>
+      </div>
+      <div id="problemsPanel" role="tabpanel">
+        <div class="problems-hint">CrashLoop, Failed, and error pods for deployments allowed in Admin. Click to stream logs (previous container when useful).</div>
+        <div class="search">
+          <input id="qProblems" placeholder="Filter problems…" aria-label="Filter problems"/>
+        </div>
+        <div class="list" id="problemsList"><div class="empty">Checking cluster…</div></div>
+      </div>
     </div>
     <div class="aside-foot">
       <button type="button" class="learn-more" id="learnMore">Learn more</button>
@@ -239,6 +292,7 @@ main{
   <main>
     <div class="bar">
       <div class="bar-title" id="sel">Select a Deployment or StatefulSet</div>
+      <div class="bar-note hidden" id="prevNote">previous container</div>
       <div class="bar-filters">
         <select id="pod" hidden aria-label="Pod"></select>
         <select id="container" hidden aria-label="Container"></select>
