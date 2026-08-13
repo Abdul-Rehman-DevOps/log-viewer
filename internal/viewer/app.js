@@ -1,5 +1,9 @@
 let workloads = [];
+let unhealthy = [];
 let active = null;
+let activeProblem = null;
+let usePreviousLogs = false;
+let sideTab = "workloads";
 let esAbort = null;
 let stickToBottom = true;
 let pendingText = "";
@@ -9,7 +13,7 @@ let about = {
   githubUrl: "https://github.com/Abdul-Rehman-DevOps",
   portfolioUrl: "https://abdulrehman.cz/",
   repoUrl: "https://github.com/Abdul-Rehman-DevOps/log-viewer",
-  version: "0.5.3"
+  version: "0.5.4"
 };
 const $ = (id) => document.getElementById(id);
 // Keep in sync with auth.SessionTTL (8h sliding idle).
@@ -137,32 +141,129 @@ function renderList() {
     html += "<div class=\"ns-section\"><span class=\"ns-label\">namespace</span> · <span class=\"ns-name\">" + ns + "</span></div>";
     byNs[ns].forEach((w) => {
       const idx = workloads.indexOf(w);
-      const isActive = active && active.namespace === w.namespace && active.name === w.name && active.kind === w.kind;
+      const isActive = !activeProblem && active && active.namespace === w.namespace && active.name === w.name && active.kind === w.kind;
       html += "<div class=\"item " + (isActive ? "active" : "") + "\" data-i=\"" + idx + "\" role=\"button\" tabindex=\"0\">" +
         "<div class=\"name\"><span class=\"kind\">" + w.kind + "</span>" + w.name + "</div>" +
         "<div class=\"meta\">" + w.ready + "/" + w.replicas + " ready · " + w.pods.length + " pods</div></div>";
     });
   });
   $("list").innerHTML = html;
-  document.querySelectorAll(".item").forEach((el) => {
+  document.querySelectorAll("#list .item").forEach((el) => {
     const go = () => select(workloads[+el.dataset.i]);
     el.onclick = go;
     el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
   });
 }
 
-function scrollLive() {
-  const el = $("log");
-  requestAnimationFrame(() => {
-    el.scrollTop = el.scrollHeight;
-    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+function updateAlertUI() {
+  const n = unhealthy.length;
+  const btn = $("alertBtn");
+  const badge = $("alertBadge");
+  const tab = $("tabProblems");
+  const tabCount = $("problemsTabCount");
+  if (badge) badge.textContent = String(n > 99 ? "99+" : n);
+  if (tabCount) tabCount.textContent = String(n > 99 ? "99+" : n);
+  if (btn) {
+    const on = n > 0;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.title = on
+      ? (n + " failing pod" + (n === 1 ? "" : "s") + " — open Problems")
+      : "No CrashLoop / Failed pods in allowed workloads";
+  }
+  if (tab) tab.classList.toggle("has-alert", n > 0);
+}
+
+function renderProblems() {
+  const qEl = $("qProblems");
+  const q = (qEl && qEl.value ? qEl.value : "").toLowerCase();
+  const items = unhealthy.filter((p) =>
+    (p.namespace + "/" + p.workload + "/" + p.pod + "/" + p.reason).toLowerCase().includes(q)
+  );
+  updateAlertUI();
+  if (!items.length) {
+    $("problemsList").innerHTML = unhealthy.length
+      ? "<div class=\"empty\">No problems match this filter</div>"
+      : "<div class=\"empty\">No CrashLoop or Failed pods in Admin-allowed workloads</div>";
+    return;
+  }
+  const byNs = {};
+  items.forEach((p) => {
+    if (!byNs[p.namespace]) byNs[p.namespace] = [];
+    byNs[p.namespace].push(p);
   });
-  $("eof").classList.remove("hidden");
+  let html = "";
+  Object.keys(byNs).sort().forEach((ns) => {
+    html += "<div class=\"ns-section\"><span class=\"ns-label\">problems</span> · <span class=\"ns-name\">" + ns + "</span></div>";
+    byNs[ns].forEach((p) => {
+      const idx = unhealthy.indexOf(p);
+      const isActive = activeProblem && activeProblem.pod === p.pod && activeProblem.namespace === p.namespace;
+      const sev = p.severity || "error";
+      html += "<div class=\"item problem sev-" + sev + " " + (isActive ? "active" : "") + "\" data-i=\"" + idx + "\" role=\"button\" tabindex=\"0\">" +
+        "<div class=\"name\"><span class=\"kind\">" + escapeHtml(p.kind) + "</span>" + escapeHtml(p.workload) + "</div>" +
+        "<div class=\"meta\">" + escapeHtml(p.pod) +
+          (p.restartCount ? " · restarts " + p.restartCount : "") + "</div>" +
+        "<span class=\"reason\">" + escapeHtml(p.reason || sev) + "</span></div>";
+    });
+  });
+  $("problemsList").innerHTML = html;
+  document.querySelectorAll("#problemsList .item").forEach((el) => {
+    const go = () => selectProblem(unhealthy[+el.dataset.i]);
+    el.onclick = go;
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  });
+}
+
+function setSideTab(tab) {
+  sideTab = tab === "problems" ? "problems" : "workloads";
+  $("tabWorkloads").classList.toggle("active", sideTab === "workloads");
+  $("tabProblems").classList.toggle("active", sideTab === "problems");
+  $("tabWorkloads").setAttribute("aria-selected", sideTab === "workloads" ? "true" : "false");
+  $("tabProblems").setAttribute("aria-selected", sideTab === "problems" ? "true" : "false");
+  $("workloadsPanel").classList.toggle("active", sideTab === "workloads");
+  $("problemsPanel").classList.toggle("active", sideTab === "problems");
+}
+
+async function selectProblem(p) {
+  if (!p) return;
+  activeProblem = p;
+  usePreviousLogs = !!p.previousLogs;
+  active = {
+    kind: p.kind,
+    namespace: p.namespace,
+    name: p.workload,
+    pods: [p.pod],
+    replicas: 1,
+    ready: 0
+  };
+  setSideTab("problems");
+  renderList();
+  renderProblems();
+  $("sel").textContent = p.reason + " · " + p.kind + " / " + p.namespace + " / " + p.workload;
+  const note = $("prevNote");
+  if (note) {
+    note.classList.toggle("hidden", !usePreviousLogs);
+    note.textContent = usePreviousLogs ? "previous container logs" : "";
+  }
+  $("pod").hidden = false;
+  $("container").hidden = false;
+  $("pod").innerHTML = "<option value=\"" + escapeHtml(p.pod) + "\" selected>" + escapeHtml(p.pod) + "</option>";
+  if (p.container) {
+    $("container").innerHTML = "<option value=\"" + escapeHtml(p.container) + "\" selected>" + escapeHtml(p.container) + "</option>";
+  } else {
+    await loadContainers();
+  }
+  follow();
 }
 
 async function select(w) {
   active = w;
+  activeProblem = null;
+  usePreviousLogs = false;
+  const note = $("prevNote");
+  if (note) note.classList.add("hidden");
   renderList();
+  renderProblems();
   $("sel").textContent = w.kind + " / " + w.namespace + " / " + w.name;
   $("pod").hidden = false;
   $("container").hidden = false;
@@ -172,6 +273,15 @@ async function select(w) {
     : "<option value=\"\">no pods</option>";
   await loadContainers();
   follow(); // always live on select — no Start button
+}
+
+function scrollLive() {
+  const el = $("log");
+  requestAnimationFrame(() => {
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+  });
+  $("eof").classList.remove("hidden");
 }
 
 async function loadContainers() {
@@ -604,11 +714,21 @@ async function follow(opts) {
     stickToBottom = true;
   }
   $("eof").classList.remove("hidden");
+  const eofLabel = $("eof") && $("eof").querySelector("span:nth-child(2)");
+  if (eofLabel) {
+    eofLabel.textContent = usePreviousLogs ? "Previous container · end of logs" : "Live · end of logs";
+  }
 
   const url = "/api/logs?namespace=" + encodeURIComponent(active.namespace) +
     "&pods=" + encodeURIComponent(pods.join(",")) +
     "&container=" + encodeURIComponent($("container").value || "") +
+    "&kind=" + encodeURIComponent(active.kind || "") +
+    "&workload=" + encodeURIComponent(active.name || "") +
+    "&previous=" + (usePreviousLogs ? "1" : "0") +
     "&tail=" + (clear ? "150" : "0");
+
+  // Previous container stream is finite — do not reconnect-follow.
+  const allowReconnect = !usePreviousLogs;
 
   try {
     const res = await fetch(url, { signal: ctrl.signal });
@@ -635,8 +755,8 @@ async function follow(opts) {
   } finally {
     if (esAbort === ctrl) {
       esAbort = null;
-      // Keep live: reconnect without wiping history.
-      if (active) setTimeout(() => { if (active && !esAbort) follow({ clear: false }); }, 1500);
+      // Keep live: reconnect without wiping history (skip for previous/finite streams).
+      if (allowReconnect && active) setTimeout(() => { if (active && !esAbort && !usePreviousLogs) follow({ clear: false }); }, 1500);
     }
   }
 }
@@ -647,7 +767,23 @@ $("aboutModal").onclick = (e) => { if (e.target === $("aboutModal")) closeAbout(
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAbout(); });
 
 $("q").oninput = renderList;
-$("pod").onchange = async () => { await loadContainers(); follow(); };
+if ($("qProblems")) $("qProblems").oninput = renderProblems;
+if ($("tabWorkloads")) $("tabWorkloads").onclick = () => setSideTab("workloads");
+if ($("tabProblems")) $("tabProblems").onclick = () => setSideTab("problems");
+if ($("alertBtn")) {
+  $("alertBtn").onclick = () => {
+    setSideTab("problems");
+    if (unhealthy.length === 1) selectProblem(unhealthy[0]);
+  };
+}
+$("pod").onchange = async () => {
+  usePreviousLogs = false;
+  activeProblem = null;
+  const note = $("prevNote");
+  if (note) note.classList.add("hidden");
+  await loadContainers();
+  follow();
+};
 $("container").onchange = () => follow();
 $("themeBtn").onclick = () => {
   const cur = document.documentElement.getAttribute("data-theme");
@@ -673,6 +809,14 @@ if ($("scrollEnd")) {
   };
 }
 
+async function refreshUnhealthy() {
+  try {
+    const d = await api("/api/unhealthy-pods");
+    unhealthy = d.pods || [];
+    renderProblems();
+  } catch (e) {}
+}
+
 (async () => {
   const me = await api("/api/me");
   if (me.needsSetup) { location.href = "/setup"; return; }
@@ -696,6 +840,7 @@ if ($("scrollEnd")) {
     fillAbout();
   }
   renderList();
+  await refreshUnhealthy();
   setInterval(async () => {
     try {
       const d = await api("/api/workloads");
@@ -703,4 +848,5 @@ if ($("scrollEnd")) {
       renderList();
     } catch (e) {}
   }, 5000);
+  setInterval(refreshUnhealthy, 8000);
 })();

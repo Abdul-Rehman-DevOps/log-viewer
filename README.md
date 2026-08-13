@@ -1,6 +1,6 @@
 # Log Viewer
 
-**Version:** `0.5.3`  
+**Version:** `0.5.4`  
 **Author:** [Abdul Rehman](https://abdulrehman.cz/)  
 **GitHub:** [Abdul-Rehman-DevOps](https://github.com/Abdul-Rehman-DevOps)  
 **Repository:** [github.com/Abdul-Rehman-DevOps/log-viewer](https://github.com/Abdul-Rehman-DevOps/log-viewer)  
@@ -23,6 +23,10 @@ Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/a
 - Auto-follow on workload select; scroll for history; jump-to-latest
 - Themes: **Dark** / **Light** (log pane always dark)
 - Browser zoom for text size; **Learn more** modal with author links
+- **Problems** tab: CrashLoopBackOff, Failed, ImagePullBackOff, and related error pods
+- Scoped to Admin-allowed workloads / namespaces only
+- Header **alert** icon highlights when any allowed workload has failing pods
+- Streams **previous container** logs automatically for crash-loop cases
 
 ### Auth & sessions
 - Viewer users in Admin (bcrypt hashes)
@@ -50,11 +54,12 @@ Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/a
 
 | Surface | Path | Purpose |
 |---------|------|---------|
-| Viewer | `/` | Live workload logs |
+| Viewer | `/` | Live workload logs + Problems |
 | Login | `/login` | Viewer sign-in |
 | Setup | `/setup` | Until first viewer user exists |
 | Admin | `/admin` | Filters, users, display |
 | Health | `/api/admin/health` | Liveness / version |
+| Unhealthy pods | `/api/unhealthy-pods` | CrashLoop / Failed pods (auth + Admin scope) |
 
 ---
 
@@ -79,15 +84,15 @@ kubectl -n log-viewer port-forward svc/log-viewer 8080:8080
 | `http://localhost:8080/` | Viewer |
 | `http://localhost:8080/admin` | Admin |
 
-Configure namespaces / apps / kinds and at least one enabled viewer user under `/admin`, then authenticate at `/login`. Namespace filters set scope; pinned apps (if any) further restrict the workload list.
+Configure namespaces / apps / kinds and at least one enabled viewer user under `/admin`, then authenticate at `/login`. Namespace filters set scope; pinned apps (if any) further restrict the workload list **and** the Problems / alert feed.
 
 ---
 
 ## Build
 
 ```bash
-docker build -t YOUR_REGISTRY/log-viewer:0.5.3 .
-docker push YOUR_REGISTRY/log-viewer:0.5.3
+docker build -t YOUR_REGISTRY/log-viewer:0.5.4 .
+docker push YOUR_REGISTRY/log-viewer:0.5.4
 ```
 
 Point the chart at your registry with `image.repository` / `image.tag`, or use the published image in **Deploy** above.

@@ -20,7 +20,7 @@ import (
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/viewer"
 )
 
-var version = "0.5.3"
+var version = "0.5.4"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
