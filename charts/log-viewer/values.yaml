@@ -1,0 +1,85 @@
+replicaCount: 2
+
+image:
+  repository: abdulrehman770/log-viewer
+  tag: "0.6.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # IRSA example:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/log-viewer-s3
+
+rbac:
+  create: true
+  clusterWide: true
+
+admin:
+  # Prefer existingSecret in production.
+  password: ""
+  existingSecret: ""
+  existingSecretKey: password
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: log-viewer.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+persistence:
+  enabled: false
+  storageClass: ""
+  size: 1Gi
+  accessMode: ReadWriteOnce
+
+# Multi-replica config sync (ConfigMap). Recommended when replicaCount > 1.
+configMapSync:
+  enabled: true
+  name: log-viewer-config
+
+seedConfig: {}
+
+# S3 archive — keep last N days of logs for History mode in the UI.
+s3:
+  enabled: false
+  bucket: ""
+  region: us-east-1
+  prefix: log-viewer
+  retentionDays: 3
+  intervalSec: 120
+  backfillSec: 3600
+  endpoint: ""
+  forcePathStyle: false
+  # Static keys (dev / non-IRSA). Prefer IRSA via serviceAccount.annotations.
+  accessKeyId: ""
+  secretAccessKey: ""
+  existingSecret: ""
+  # Keys inside existingSecret: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (optional AWS_SESSION_TOKEN)
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,14 +1,14 @@
 # Log Viewer
 
-**Version:** `0.5.4`  
+**Version:** `0.6.0`  
 **Author:** [Abdul Rehman](https://abdulrehman.cz/)  
 **GitHub:** [Abdul-Rehman-DevOps](https://github.com/Abdul-Rehman-DevOps)  
 **Repository:** [github.com/Abdul-Rehman-DevOps/log-viewer](https://github.com/Abdul-Rehman-DevOps/log-viewer)  
 **License:** [MIT](LICENSE)
 
-Kubernetes-native log viewer: live multi-pod streams, Admin-scoped discovery, viewer authentication, and ConfigMap-backed multi-replica config. Logs stay in-cluster — no third-party shipping.
+Kubernetes-native log viewer: live multi-pod streams, Admin-scoped discovery, viewer authentication, ConfigMap-backed multi-replica config, and optional **S3 history** for the last **3 days**.
 
-Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/abdulrehman770/log-viewer)
+Published image: [`abdulrehman770/log-viewer:0.6.0`](https://hub.docker.com/r/abdulrehman770/log-viewer)
 
 ---
 
@@ -16,6 +16,7 @@ Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/a
 
 ### Viewer (`/`)
 - Live logs for **Deployments**, **StatefulSets**, **DaemonSets**, and **Jobs** (kinds Admin-controlled)
+- **History** mode: pick any From/To window within the last 3 days (S3 archive)
 - Dynamic discovery via the Kubernetes API (namespaces + workloads)
 - Multi-pod stream with source badges, timestamps (PKT), and level indicators
 - ANSI preserved; structured coloring for JSON, logfmt (`key=value`), and plain text
@@ -46,6 +47,7 @@ Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/a
 - In-cluster client (ServiceAccount + ClusterRole)
 - Deployment → ReplicaSet → Pod ownership resolution
 - Optional PVC; ConfigMap sync for multi-replica
+- Optional **S3 archival** (collector + retention cleanup)
 - Structured access / auth / stream logs
 
 ---
@@ -54,26 +56,97 @@ Published image: [`abdulrehman770/log-viewer:latest`](https://hub.docker.com/r/a
 
 | Surface | Path | Purpose |
 |---------|------|---------|
-| Viewer | `/` | Live workload logs + Problems |
+| Viewer | `/` | Live + History workload logs + Problems |
 | Login | `/login` | Viewer sign-in |
 | Setup | `/setup` | Until first viewer user exists |
 | Admin | `/admin` | Filters, users, display |
 | Health | `/api/admin/health` | Liveness / version |
 | Unhealthy pods | `/api/unhealthy-pods` | CrashLoop / Failed pods (auth + Admin scope) |
+| Log history | `/api/logs/history` | S3-backed range query (auth) |
+| Archive status | `/api/archive/status` | Whether S3 history is enabled |
 
 ---
 
-## Deploy
+## Deploy (with S3 history)
+
+### 1. Create an S3 bucket
+
+```bash
+aws s3 mb s3://YOUR_LOG_VIEWER_BUCKET --region us-east-1
+```
+
+Recommended lifecycle rule (matches app retention):
+
+```json
+{
+  "Rules": [{
+    "ID": "log-viewer-3d",
+    "Status": "Enabled",
+    "Filter": { "Prefix": "log-viewer/" },
+    "Expiration": { "Days": 3 }
+  }]
+}
+```
+
+IAM needs at least: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket`, `s3:DeleteObject` on that bucket/prefix. Prefer **IRSA** (EKS) over static keys.
+
+### 2. Helm install / upgrade
+
+From the `log-viewer` repo root (where `charts/` lives):
 
 ```bash
 helm upgrade --install log-viewer ./charts/log-viewer \
   --namespace log-viewer \
   --create-namespace \
   --set image.repository=abdulrehman770/log-viewer \
-  --set image.tag=latest \
+  --set image.tag=0.6.0 \
   --set image.pullPolicy=Always \
-  --set admin.password='CHANGE_ME_STRONG'
+  --set admin.password='CHANGE_ME_STRONG' \
+  --set s3.enabled=true \
+  --set s3.bucket=YOUR_LOG_VIEWER_BUCKET \
+  --set s3.region=us-east-1 \
+  --set s3.prefix=log-viewer \
+  --set s3.retentionDays=3 \
+  --set s3.intervalSec=120
 ```
+
+**IRSA (recommended on EKS)** — annotate the ServiceAccount and omit static keys:
+
+```bash
+helm upgrade --install log-viewer ./charts/log-viewer \
+  --namespace log-viewer \
+  --create-namespace \
+  --set image.tag=0.6.0 \
+  --set image.pullPolicy=Always \
+  --set admin.password='CHANGE_ME_STRONG' \
+  --set s3.enabled=true \
+  --set s3.bucket=YOUR_LOG_VIEWER_BUCKET \
+  --set s3.region=us-east-1 \
+  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::ACCOUNT:role/log-viewer-s3
+```
+
+**Static AWS keys** (dev only):
+
+```bash
+helm upgrade --install log-viewer ./charts/log-viewer \
+  --namespace log-viewer \
+  --create-namespace \
+  --set image.tag=0.6.0 \
+  --set admin.password='CHANGE_ME_STRONG' \
+  --set s3.enabled=true \
+  --set s3.bucket=YOUR_LOG_VIEWER_BUCKET \
+  --set s3.region=us-east-1 \
+  --set s3.accessKeyId=AKIA... \
+  --set s3.secretAccessKey='...'
+```
+
+Or use an existing secret with keys `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`:
+
+```bash
+--set s3.existingSecret=my-aws-secret
+```
+
+### 3. Open the UI
 
 ```bash
 kubectl -n log-viewer port-forward svc/log-viewer 8080:8080
@@ -81,21 +154,37 @@ kubectl -n log-viewer port-forward svc/log-viewer 8080:8080
 
 | Endpoint | Role |
 |----------|------|
-| `http://localhost:8080/` | Viewer |
+| `http://localhost:8080/` | Viewer (Live / History) |
 | `http://localhost:8080/admin` | Admin |
 
-Configure namespaces / apps / kinds and at least one enabled viewer user under `/admin`, then authenticate at `/login`. Namespace filters set scope; pinned apps (if any) further restrict the workload list **and** the Problems / alert feed.
+Configure namespaces / apps / kinds and at least one enabled viewer user under `/admin`, then authenticate at `/login`.
+
+In the viewer: select a workload → **History** → set **From** / **To** (within last 3 days) → **Load**.
+
+> **Note:** History is filled **going forward** after S3 is enabled (plus a short kubelet backfill on first collect). Objects stay in S3 for the retention window even after **Pods** or **Deployments** are deleted — use **History** mode to browse archived workloads by date/time.
+
+### Deploy without S3 (live only)
+
+```bash
+helm upgrade --install log-viewer ./charts/log-viewer \
+  --namespace log-viewer \
+  --create-namespace \
+  --set image.repository=abdulrehman770/log-viewer \
+  --set image.tag=0.6.0 \
+  --set image.pullPolicy=Always \
+  --set admin.password='CHANGE_ME_STRONG'
+```
 
 ---
 
-## Build
+## Build & push
 
 ```bash
-docker build -t YOUR_REGISTRY/log-viewer:0.5.4 .
-docker push YOUR_REGISTRY/log-viewer:0.5.4
+docker build -t YOUR_REGISTRY/log-viewer:0.6.0 .
+docker push YOUR_REGISTRY/log-viewer:0.6.0
 ```
 
-Point the chart at your registry with `image.repository` / `image.tag`, or use the published image in **Deploy** above.
+Point the chart at your registry with `image.repository` / `image.tag`, or use the published image above.
 
 ---
 
@@ -115,14 +204,28 @@ Point the chart at your registry with `image.repository` / `image.tag`, or use t
 | `LOG_VIEWER_CONFIGMAP` | _(empty)_ | Multi-replica ConfigMap name |
 | `POD_NAMESPACE` | _(empty)_ | ConfigMap namespace (downward API) |
 | `KUBECONFIG` | in-cluster | Optional local kubeconfig |
+| `LOG_VIEWER_S3_ENABLED` | `false` | Enable S3 archival + History UI |
+| `LOG_VIEWER_S3_BUCKET` | _(required if enabled)_ | Target bucket |
+| `LOG_VIEWER_S3_REGION` | `us-east-1` | AWS region |
+| `LOG_VIEWER_S3_PREFIX` | `log-viewer` | Key prefix |
+| `LOG_VIEWER_S3_RETENTION_DAYS` | `3` | App-side cleanup window |
+| `LOG_VIEWER_S3_INTERVAL_SEC` | `120` | Collector interval |
+| `LOG_VIEWER_S3_BACKFILL_SEC` | `3600` | First-collect kubelet window |
+| `LOG_VIEWER_S3_ENDPOINT` | _(empty)_ | Custom endpoint (MinIO, etc.) |
+| `LOG_VIEWER_S3_FORCE_PATH_STYLE` | `false` | Path-style S3 (MinIO) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | _(optional)_ | Static credentials; prefer IRSA |
 
 ### Helm (summary)
 
 | Key | Notes |
 |-----|--------|
-| `image.repository` / `image.tag` | Container image |
-| `replicaCount` | Default `4` (ConfigMap sync; PVC off by default) |
+| `image.repository` / `image.tag` | Container image (`0.6.0`) |
+| `replicaCount` | Default `2` (ConfigMap sync; PVC off by default) |
 | `admin.password` / `admin.existingSecret` | Bootstrap Admin credentials |
+| `s3.enabled` / `s3.bucket` / `s3.region` | S3 history |
+| `s3.retentionDays` | Default `3` |
+| `s3.accessKeyId` / `secretAccessKey` / `existingSecret` | Credentials (or IRSA) |
+| `serviceAccount.annotations` | IRSA role ARN |
 | `seedConfig` | Initial config when `/data/config.json` is absent |
 | `rbac.clusterWide` | ClusterRole for namespaces / pods / logs |
 | `persistence.*` | PVC for `/data` |
@@ -140,20 +243,21 @@ Persisted as `config.json` (and ConfigMap when enabled): `mode`, `include` / `ex
 ## Architecture
 
 ```
-Browser ──► Log Viewer (Go) ──► Kubernetes API
+Browser ──► Log Viewer (Go) ──► Kubernetes API (live logs)
                  │
-                 ├─ /           viewer UI (embedded)
+                 ├─ /           viewer UI (Live + History)
                  ├─ /admin      admin UI
-                 ├─ /api/*      auth, workloads, log stream
+                 ├─ /api/*      auth, workloads, log stream / history
                  ├─ PVC /data   config.json
-                 └─ ConfigMap   multi-replica sync (optional)
+                 ├─ ConfigMap   multi-replica sync (optional)
+                 └─ S3          last 3 days archived chunks (optional)
 ```
 
 - **Module:** `github.com/Abdul-Rehman-DevOps/log-viewer`
 - **Entry:** `cmd/log-viewer`
-- **Packages:** `internal/viewer`, `internal/admin`, `internal/auth`, `internal/config`, `internal/k8s`, `internal/syncer`
+- **Packages:** `internal/viewer`, `internal/admin`, `internal/auth`, `internal/config`, `internal/k8s`, `internal/syncer`, `internal/archive`
 
-Discovery is request-time against the API, constrained by Admin filters and ServiceAccount RBAC.
+Discovery is request-time against the API, constrained by Admin filters and ServiceAccount RBAC. The archive collector snapshots allowed workloads on an interval and stores gzipped JSONL under `{prefix}/v1/{ns}/{kind}/{workload}/{pod}/{date}/…`.
 
 ---
 
@@ -167,6 +271,13 @@ export LOG_VIEWER_DATA=./tmp-data
 export LOG_VIEWER_ASSETS=./branding
 export KUBECONFIG=~/.kube/config
 
+# Optional S3 history (MinIO or AWS)
+export LOG_VIEWER_S3_ENABLED=true
+export LOG_VIEWER_S3_BUCKET=log-viewer-dev
+export LOG_VIEWER_S3_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+
 go run ./cmd/log-viewer -listen :8080
 ```
 
@@ -178,10 +289,11 @@ go run ./cmd/log-viewer -listen :8080
 kubectl -n log-viewer logs -f deploy/log-viewer --prefix
 ```
 
-Notable lines: startup / idle timeout, `viewer login ok`, `admin login ok`, `session timeout`, `workloads: returned=…`, `logs stream start|end`, HTTP access.
+Notable lines: startup / idle timeout, `s3 archive enabled|disabled`, `s3 archive tick`, `viewer login ok`, `admin login ok`, `session timeout`, `workloads: returned=…`, `logs stream start|end`, `logs history`, HTTP access.
 
 ```bash
 helm upgrade log-viewer ./charts/log-viewer -n log-viewer --reuse-values \
+  --set image.tag=0.6.0 \
   --set image.pullPolicy=Always
 ```
 
@@ -196,6 +308,7 @@ helm uninstall log-viewer -n log-viewer
 - Strong `admin.password` (prefer `admin.existingSecret` in GitOps)
 - Viewer passwords: bcrypt; sessions: HMAC cookies, **8h** sliding idle
 - RBAC can list pods and stream logs — scope ClusterRole carefully
+- Prefer IRSA / workload identity for S3; avoid embedding long-lived keys in values
 - Branding is not Admin-editable by design
 
 ---
@@ -210,6 +323,7 @@ internal/auth/           sessions
 internal/config/         settings store
 internal/k8s/            workloads + streams
 internal/syncer/         ConfigMap sync
+internal/archive/        S3 collector + history query
 charts/log-viewer/       Helm chart
 branding/                assets
 Dockerfile

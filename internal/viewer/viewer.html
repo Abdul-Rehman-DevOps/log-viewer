@@ -148,11 +148,29 @@ main{
   flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-weight:600;font-size:.85rem;color:oklch(89.23% 0 0)
 }
-.bar-filters{flex:0 1 auto;display:flex;align-items:center;gap:.4rem;min-width:0}
+.bar-filters{flex:0 1 auto;display:flex;align-items:center;gap:.4rem;min-width:0;flex-wrap:wrap}
 .bar-filters select{
   height:30px;max-width:190px;min-width:0;background:oklch(25% 0 0);border:1px solid oklch(40% 0 0 / .45);
   color:oklch(89.23% 0 0);border-radius:4px;padding:0 .55rem;font-family:inherit;font-size:.8rem
 }
+.mode-toggle{display:inline-flex;border:1px solid oklch(40% 0 0 / .45);border-radius:4px;overflow:hidden;flex:0 0 auto}
+.mode-toggle button{
+  height:30px;padding:0 .65rem;border:0;background:oklch(25% 0 0);color:oklch(70% 0 0);font:inherit;font-size:.75rem;font-weight:600;cursor:pointer
+}
+.mode-toggle button.active{background:oklch(35% 0 0);color:oklch(95% 0 0)}
+.hist-range{display:none;align-items:center;gap:.35rem;flex-wrap:wrap}
+.hist-range.show{display:inline-flex}
+.hist-range label{font-size:.7rem;color:oklch(70% 0 0);white-space:nowrap}
+.hist-range input[type="datetime-local"]{
+  height:30px;background:oklch(25% 0 0);border:1px solid oklch(40% 0 0 / .45);color:oklch(89.23% 0 0);
+  border-radius:4px;padding:0 .4rem;font-family:inherit;font-size:.72rem;max-width:11.5rem
+}
+.hist-range button#histLoad{
+  height:30px;padding:0 .7rem;border:1px solid oklch(40% 0 0 / .45);border-radius:4px;
+  background:oklch(32% 0 0);color:oklch(95% 0 0);font:inherit;font-size:.75rem;font-weight:600;cursor:pointer
+}
+.hist-range button#histLoad:disabled{opacity:.45;cursor:not-allowed}
+.hist-hint{font-size:.68rem;color:oklch(65% 0 0);max-width:14rem}
 .log-wrap{flex:1 1 auto;min-height:0;position:relative;background:oklch(11% 0 0)!important;display:flex;flex-direction:column}
 #log{
   flex:1 1 auto;min-height:0;overflow:auto;padding:0 0 2.75rem;margin:0;
@@ -294,6 +312,18 @@ main{
       <div class="bar-title" id="sel">Select a Deployment or StatefulSet</div>
       <div class="bar-note hidden" id="prevNote">previous container</div>
       <div class="bar-filters">
+        <div class="mode-toggle" role="group" aria-label="Log mode">
+          <button type="button" class="active" id="modeLive" aria-pressed="true">Live</button>
+          <button type="button" id="modeHistory" aria-pressed="false" title="Last 3 days from S3">History</button>
+        </div>
+        <div class="hist-range" id="histRange">
+          <label for="histFrom">From</label>
+          <input type="datetime-local" id="histFrom" aria-label="History from"/>
+          <label for="histTo">To</label>
+          <input type="datetime-local" id="histTo" aria-label="History to"/>
+          <button type="button" id="histLoad">Load</button>
+          <span class="hist-hint" id="histHint">S3 · last 3 days</span>
+        </div>
         <select id="pod" hidden aria-label="Pod"></select>
         <select id="container" hidden aria-label="Container"></select>
       </div>

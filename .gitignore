@@ -4,7 +4,8 @@
 /out/
 /tmp-data/
 *.exe
-log-viewer
+/log-viewer
+/log-viewer.exe
 !cmd/log-viewer/
 
 # Go

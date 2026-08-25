@@ -1,0 +1,6 @@
+apiVersion: v2
+name: log-viewer
+description: Kubernetes-native log viewer with optional S3 history (last 3 days)
+type: application
+version: 0.6.0
+appVersion: "0.6.0"

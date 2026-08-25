@@ -1,8 +1,12 @@
 let workloads = [];
+let archivedWorkloads = [];
+let displayWorkloads = [];
 let unhealthy = [];
 let active = null;
 let activeProblem = null;
 let usePreviousLogs = false;
+let logMode = "live"; // live | history
+let archiveInfo = { enabled: false, retentionDays: 3 };
 let sideTab = "workloads";
 let esAbort = null;
 let stickToBottom = true;
@@ -13,7 +17,7 @@ let about = {
   githubUrl: "https://github.com/Abdul-Rehman-DevOps",
   portfolioUrl: "https://abdulrehman.cz/",
   repoUrl: "https://github.com/Abdul-Rehman-DevOps/log-viewer",
-  version: "0.5.4"
+  version: "0.6.0"
 };
 const $ = (id) => document.getElementById(id);
 // Keep in sync with auth.SessionTTL (8h sliding idle).
@@ -122,13 +126,58 @@ async function api(path) {
   return res.json();
 }
 
+function mergeDisplayWorkloads() {
+  if (logMode !== "history" || !archiveInfo.enabled) {
+    displayWorkloads = workloads.slice();
+    return;
+  }
+  const map = new Map();
+  workloads.forEach((w) => {
+    const key = w.namespace + "/" + w.kind + "/" + w.name;
+    map.set(key, Object.assign({}, w, { archivedOnly: false }));
+  });
+  archivedWorkloads.forEach((a) => {
+    const key = a.namespace + "/" + a.kind + "/" + a.name;
+    const live = map.get(key);
+    if (live) {
+      // Keep live pods; merge any archived pod names that vanished.
+      const set = new Set(live.pods || []);
+      (a.pods || []).forEach((p) => set.add(p));
+      live.pods = Array.from(set).sort();
+      live.archiveDays = a.days || [];
+      live.fromArchive = true;
+    } else {
+      map.set(key, {
+        kind: a.kind,
+        namespace: a.namespace,
+        name: a.name,
+        replicas: 0,
+        ready: 0,
+        pods: a.pods || [],
+        archivedOnly: true,
+        fromArchive: true,
+        archiveDays: a.days || [],
+        lastSeen: a.lastSeen || ""
+      });
+    }
+  });
+  displayWorkloads = Array.from(map.values()).sort((a, b) => {
+    if (a.namespace !== b.namespace) return a.namespace < b.namespace ? -1 : 1;
+    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
+    return a.name < b.name ? -1 : 1;
+  });
+}
+
 function renderList() {
   const q = $("q").value.toLowerCase();
-  const items = workloads.filter((w) =>
+  const source = logMode === "history" ? displayWorkloads : workloads;
+  const items = source.filter((w) =>
     (w.namespace + "/" + w.kind + "/" + w.name).toLowerCase().includes(q)
   );
   if (!items.length) {
-    $("list").innerHTML = "<div class=\"empty\">No workloads match admin settings</div>";
+    $("list").innerHTML = logMode === "history"
+      ? "<div class=\"empty\">No archived workloads in S3 yet (last " + retentionDays() + " days)</div>"
+      : "<div class=\"empty\">No workloads match admin settings</div>";
     return;
   }
   const byNs = {};
@@ -140,16 +189,26 @@ function renderList() {
   Object.keys(byNs).sort().forEach((ns) => {
     html += "<div class=\"ns-section\"><span class=\"ns-label\">namespace</span> · <span class=\"ns-name\">" + ns + "</span></div>";
     byNs[ns].forEach((w) => {
-      const idx = workloads.indexOf(w);
+      const idx = source.indexOf(w);
       const isActive = !activeProblem && active && active.namespace === w.namespace && active.name === w.name && active.kind === w.kind;
-      html += "<div class=\"item " + (isActive ? "active" : "") + "\" data-i=\"" + idx + "\" role=\"button\" tabindex=\"0\">" +
-        "<div class=\"name\"><span class=\"kind\">" + w.kind + "</span>" + w.name + "</div>" +
-        "<div class=\"meta\">" + w.ready + "/" + w.replicas + " ready · " + w.pods.length + " pods</div></div>";
+      let meta;
+      if (w.archivedOnly) {
+        const days = (w.archiveDays && w.archiveDays.length) ? w.archiveDays.length + " day(s)" : "S3";
+        meta = "deleted · " + (w.pods || []).length + " archived pods · " + days;
+      } else if (w.fromArchive && logMode === "history") {
+        meta = w.ready + "/" + w.replicas + " ready · " + w.pods.length + " pods · S3 history";
+      } else {
+        meta = w.ready + "/" + w.replicas + " ready · " + w.pods.length + " pods";
+      }
+      html += "<div class=\"item " + (isActive ? "active" : "") + (w.archivedOnly ? " archived" : "") + "\" data-i=\"" + idx + "\" role=\"button\" tabindex=\"0\">" +
+        "<div class=\"name\"><span class=\"kind\">" + w.kind + "</span>" + w.name +
+        (w.archivedOnly ? " <span class=\"kind\" style=\"opacity:.7\">archived</span>" : "") + "</div>" +
+        "<div class=\"meta\">" + meta + "</div></div>";
     });
   });
   $("list").innerHTML = html;
   document.querySelectorAll("#list .item").forEach((el) => {
-    const go = () => select(workloads[+el.dataset.i]);
+    const go = () => select(source[+el.dataset.i]);
     el.onclick = go;
     el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
   });
@@ -261,18 +320,236 @@ async function select(w) {
   activeProblem = null;
   usePreviousLogs = false;
   const note = $("prevNote");
-  if (note) note.classList.add("hidden");
+  if (note) {
+    if (w.archivedOnly) {
+      note.textContent = "archived (deleted from cluster)";
+      note.classList.remove("hidden");
+    } else {
+      note.classList.add("hidden");
+    }
+  }
+  mergeDisplayWorkloads();
   renderList();
   renderProblems();
-  $("sel").textContent = w.kind + " / " + w.namespace + " / " + w.name;
+  $("sel").textContent = w.kind + " / " + w.namespace + " / " + w.name + (w.archivedOnly ? " (archived)" : "");
   $("pod").hidden = false;
   $("container").hidden = false;
-  $("pod").innerHTML = w.pods.length
-    ? ["<option value=\"__all__\" selected>All pods (" + w.pods.length + ")</option>"]
-        .concat(w.pods.map((p) => "<option value=\"" + p + "\">" + p + "</option>")).join("")
-    : "<option value=\"\">no pods</option>";
+  const pods = w.pods || [];
+  $("pod").innerHTML = pods.length
+    ? ["<option value=\"__all__\" selected>All pods (" + pods.length + ")</option>"]
+        .concat(pods.map((p) => "<option value=\"" + p + "\">" + p + "</option>")).join("")
+    : "<option value=\"__all__\" selected>All archived pods</option>";
+  if (w.archivedOnly) {
+    $("container").innerHTML = "<option value=\"\">all containers</option>";
+    followOrHistory();
+    return;
+  }
   await loadContainers();
-  follow(); // always live on select — no Start button
+  followOrHistory(); // live stream or wait for history Load
+}
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function toLocalInputValue(d) {
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+    "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+
+function fromLocalInputValue(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function retentionDays() {
+  return archiveInfo.retentionDays > 0 ? archiveInfo.retentionDays : 3;
+}
+
+function initHistoryRangeDefaults() {
+  const to = new Date();
+  const from = new Date(to.getTime() - 60 * 60 * 1000);
+  const min = new Date(to.getTime() - retentionDays() * 24 * 60 * 60 * 1000);
+  const fromEl = $("histFrom");
+  const toEl = $("histTo");
+  if (!fromEl || !toEl) return;
+  fromEl.min = toLocalInputValue(min);
+  toEl.min = toLocalInputValue(min);
+  fromEl.max = toLocalInputValue(to);
+  toEl.max = toLocalInputValue(to);
+  if (!fromEl.value) fromEl.value = toLocalInputValue(from);
+  if (!toEl.value) toEl.value = toLocalInputValue(to);
+}
+
+function applyArchiveUI() {
+  const hint = $("histHint");
+  const histBtn = $("modeHistory");
+  const days = retentionDays();
+  if (hint) {
+    hint.textContent = archiveInfo.enabled
+      ? ("S3 · last " + days + " days")
+      : "S3 not configured";
+  }
+  if (histBtn) {
+    histBtn.disabled = !archiveInfo.enabled;
+    histBtn.title = archiveInfo.enabled
+      ? ("Query archived logs (last " + days + " days)")
+      : "Enable LOG_VIEWER_S3_* to use History";
+  }
+}
+
+function setLogMode(mode) {
+  if (mode === "history" && !archiveInfo.enabled) {
+    mode = "live";
+  }
+  logMode = mode;
+  const liveBtn = $("modeLive");
+  const histBtn = $("modeHistory");
+  const range = $("histRange");
+  if (liveBtn) {
+    liveBtn.classList.toggle("active", mode === "live");
+    liveBtn.setAttribute("aria-pressed", mode === "live" ? "true" : "false");
+  }
+  if (histBtn) {
+    histBtn.classList.toggle("active", mode === "history");
+    histBtn.setAttribute("aria-pressed", mode === "history" ? "true" : "false");
+  }
+  if (range) range.classList.toggle("show", mode === "history");
+  if (mode === "history") {
+    initHistoryRangeDefaults();
+    stopLogs();
+    refreshArchivedWorkloads().then(() => {
+      mergeDisplayWorkloads();
+      renderList();
+    });
+    const eofLabel = $("eof") && $("eof").querySelector("span:nth-child(2)");
+    if (eofLabel) eofLabel.textContent = "History · end of range";
+    if (active) {
+      $("log").innerHTML = "<div class=\"empty\">Pick From / To (date &amp; time) and click Load — works even if the Deployment/pods were deleted</div>";
+      $("eof").classList.add("hidden");
+    }
+  } else {
+    if (active && active.archivedOnly) {
+      active = null;
+      $("sel").textContent = "Select a Deployment or StatefulSet";
+      $("pod").hidden = true;
+      $("container").hidden = true;
+      $("log").innerHTML = "<div class=\"empty\">Pick a live workload to stream logs</div>";
+      $("eof").classList.add("hidden");
+      const note = $("prevNote");
+      if (note) note.classList.add("hidden");
+    }
+    mergeDisplayWorkloads();
+    renderList();
+    followOrHistory();
+  }
+}
+
+function followOrHistory() {
+  if (logMode === "history") {
+    if (active) {
+      stopLogs();
+      $("log").innerHTML = "<div class=\"empty\">Pick From / To (date &amp; time) and click Load</div>";
+      $("eof").classList.add("hidden");
+    }
+    return;
+  }
+  if (active && active.archivedOnly) {
+    $("log").innerHTML = "<div class=\"empty\">This workload only exists in S3 archive — switch to History</div>";
+    $("eof").classList.add("hidden");
+    return;
+  }
+  follow();
+}
+
+async function refreshArchivedWorkloads() {
+  if (!archiveInfo.enabled) {
+    archivedWorkloads = [];
+    return;
+  }
+  try {
+    const d = await api("/api/archive/workloads");
+    archivedWorkloads = d.workloads || [];
+  } catch (e) {
+    archivedWorkloads = [];
+  }
+}
+
+async function loadHistory() {
+  if (!active) {
+    $("log").innerHTML = "<div class=\"empty\">Select a workload (live or archived)</div>";
+    return;
+  }
+  if (!archiveInfo.enabled) {
+    $("log").innerHTML = "<div class=\"empty\">S3 archive is not enabled on this deployment</div>";
+    return;
+  }
+  const from = fromLocalInputValue($("histFrom") && $("histFrom").value);
+  const to = fromLocalInputValue($("histTo") && $("histTo").value);
+  if (!from || !to || !(to > from)) {
+    $("log").innerHTML = "<div class=\"empty\">Choose a valid From / To date-time (within last " + retentionDays() + " days)</div>";
+    return;
+  }
+  const min = new Date(Date.now() - retentionDays() * 24 * 60 * 60 * 1000);
+  if (from < min) {
+    $("log").innerHTML = "<div class=\"empty\">From is older than retention (" + retentionDays() + " days)</div>";
+    return;
+  }
+  stopLogs();
+  const ctrl = new AbortController();
+  esAbort = ctrl;
+  $("log").innerHTML = "";
+  stickToBottom = true;
+  $("eof").classList.remove("hidden");
+  const eofLabel = $("eof") && $("eof").querySelector("span:nth-child(2)");
+  if (eofLabel) eofLabel.textContent = "History · loading…";
+  const loadBtn = $("histLoad");
+  if (loadBtn) loadBtn.disabled = true;
+
+  const pods = selectedPods();
+  let url = "/api/logs/history?namespace=" + encodeURIComponent(active.namespace) +
+    "&container=" + encodeURIComponent($("container").value || "") +
+    "&kind=" + encodeURIComponent(active.kind || "") +
+    "&workload=" + encodeURIComponent(active.name || "") +
+    "&from=" + encodeURIComponent(from.toISOString()) +
+    "&to=" + encodeURIComponent(to.toISOString());
+  if (pods.length) {
+    url += "&pods=" + encodeURIComponent(pods.join(","));
+  }
+
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) {
+      queueChunk("\n[error] " + (await res.text()) + "\n");
+      flushPending();
+      $("eof").classList.add("hidden");
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let got = false;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      got = true;
+      bumpActivity();
+      queueChunk(dec.decode(value, { stream: true }));
+    }
+    flushPending();
+    if (!got) {
+      $("log").innerHTML = "<div class=\"empty\">No archived logs in this date/time range</div>";
+      $("eof").classList.add("hidden");
+    } else {
+      if (eofLabel) eofLabel.textContent = "History · end of range";
+      if (stickToBottom) scrollLive();
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    queueChunk("\n[history error] " + (e.message || e) + "\n");
+    flushPending();
+  } finally {
+    if (loadBtn) loadBtn.disabled = false;
+    if (esAbort === ctrl) esAbort = null;
+  }
 }
 
 function scrollLive() {
@@ -311,8 +588,8 @@ function stopLogs() {
 function selectedPods() {
   if (!active) return [];
   const v = $("pod").value;
-  if (v === "__all__") return active.pods.slice();
-  return v ? [v] : [];
+  if (!v || v === "__all__") return (active.pods || []).slice();
+  return [v];
 }
 
 function escapeHtml(s) {
@@ -699,6 +976,7 @@ function updateScrollEndBtn() {
 }
 
 async function follow(opts) {
+  if (logMode === "history") return;
   const clear = !opts || opts.clear !== false;
   stopLogs();
   const pods = selectedPods();
@@ -782,9 +1060,12 @@ $("pod").onchange = async () => {
   const note = $("prevNote");
   if (note) note.classList.add("hidden");
   await loadContainers();
-  follow();
+  followOrHistory();
 };
-$("container").onchange = () => follow();
+$("container").onchange = () => followOrHistory();
+if ($("modeLive")) $("modeLive").onclick = () => setLogMode("live");
+if ($("modeHistory")) $("modeHistory").onclick = () => setLogMode("history");
+if ($("histLoad")) $("histLoad").onclick = () => loadHistory();
 $("themeBtn").onclick = () => {
   const cur = document.documentElement.getAttribute("data-theme");
   applyTheme(cur === "dark" ? "light" : "dark");
@@ -829,6 +1110,9 @@ async function refreshUnhealthy() {
     repoUrl: me.repoUrl || about.repoUrl,
     version: me.version || about.version
   };
+  if (me.archive) archiveInfo = me.archive;
+  applyArchiveUI();
+  initHistoryRangeDefaults();
   fillAbout();
   const data = await api("/api/workloads");
   workloads = data.workloads || [];
@@ -839,12 +1123,16 @@ async function refreshUnhealthy() {
     about.repoUrl = data.config.repoUrl || about.repoUrl;
     fillAbout();
   }
+  if (archiveInfo.enabled) await refreshArchivedWorkloads();
+  mergeDisplayWorkloads();
   renderList();
   await refreshUnhealthy();
   setInterval(async () => {
     try {
       const d = await api("/api/workloads");
       workloads = d.workloads || [];
+      if (logMode === "history" && archiveInfo.enabled) await refreshArchivedWorkloads();
+      mergeDisplayWorkloads();
       renderList();
     } catch (e) {}
   }, 5000);

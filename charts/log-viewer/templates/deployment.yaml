@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "log-viewer.fullname" . }}
+  labels:
+    {{- include "log-viewer.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "log-viewer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "log-viewer.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "log-viewer.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: log-viewer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: LOG_VIEWER_LISTEN
+              value: ":8080"
+            - name: LOG_VIEWER_DATA
+              value: /data
+            {{- if .Values.configMapSync.enabled }}
+            - name: LOG_VIEWER_CONFIGMAP
+              value: {{ .Values.configMapSync.name | quote }}
+            {{- end }}
+            {{- if .Values.admin.existingSecret }}
+            - name: LOG_VIEWER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.admin.existingSecret }}
+                  key: {{ .Values.admin.existingSecretKey }}
+            {{- else if .Values.admin.password }}
+            - name: LOG_VIEWER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "log-viewer.fullname" . }}
+                  key: password
+            {{- end }}
+            {{- if .Values.s3.enabled }}
+            - name: LOG_VIEWER_S3_ENABLED
+              value: "true"
+            - name: LOG_VIEWER_S3_BUCKET
+              value: {{ .Values.s3.bucket | quote }}
+            - name: LOG_VIEWER_S3_REGION
+              value: {{ .Values.s3.region | quote }}
+            - name: LOG_VIEWER_S3_PREFIX
+              value: {{ .Values.s3.prefix | quote }}
+            - name: LOG_VIEWER_S3_RETENTION_DAYS
+              value: {{ .Values.s3.retentionDays | quote }}
+            - name: LOG_VIEWER_S3_INTERVAL_SEC
+              value: {{ .Values.s3.intervalSec | quote }}
+            - name: LOG_VIEWER_S3_BACKFILL_SEC
+              value: {{ .Values.s3.backfillSec | quote }}
+            {{- if .Values.s3.endpoint }}
+            - name: LOG_VIEWER_S3_ENDPOINT
+              value: {{ .Values.s3.endpoint | quote }}
+            {{- end }}
+            {{- if .Values.s3.forcePathStyle }}
+            - name: LOG_VIEWER_S3_FORCE_PATH_STYLE
+              value: "true"
+            {{- end }}
+            {{- if .Values.s3.existingSecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3.existingSecret }}
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3.existingSecret }}
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: true
+            {{- else if or .Values.s3.accessKeyId .Values.s3.secretAccessKey }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "log-viewer.fullname" . }}
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "log-viewer.fullname" . }}
+                  key: AWS_SECRET_ACCESS_KEY
+            {{- end }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /api/admin/health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/admin/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "log-viewer.fullname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

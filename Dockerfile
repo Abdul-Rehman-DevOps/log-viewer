@@ -10,7 +10,7 @@ RUN go mod download 2>/dev/null || true
 COPY . .
 ENV GOTOOLCHAIN=auto
 RUN go mod tidy && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -buildvcs=false -ldflags="-s -w -X main.version=0.5.3" \
+    go build -buildvcs=false -ldflags="-s -w -X main.version=0.6.0" \
     -o /out/log-viewer ./cmd/log-viewer
 
 FROM alpine:3.20

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/admin"
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/archive"
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/auth"
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/k8s"
@@ -20,7 +21,7 @@ import (
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/viewer"
 )
 
-var version = "0.5.4"
+var version = "0.6.0"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
@@ -93,6 +94,24 @@ func main() {
 	}
 	view := &viewer.Server{Store: store, K8s: kclient, Sessions: sessions}
 
+	archCfg := archive.ConfigFromEnv()
+	var collector *archive.Collector
+	if archCfg.Valid() {
+		s3store, err := archive.NewStore(context.Background(), archCfg)
+		if err != nil {
+			log.Printf("s3 archive disabled: %v", err)
+		} else {
+			view.Archive = s3store
+			collector = archive.NewCollector(s3store, kclient, store)
+			collector.Start(context.Background())
+			log.Printf("s3 archive enabled bucket=%s region=%s retention=%dd", archCfg.Bucket, archCfg.Region, archCfg.RetentionDays)
+		}
+	} else if archCfg.Enabled {
+		log.Printf("s3 archive enabled but LOG_VIEWER_S3_BUCKET is empty — skipping")
+	} else {
+		log.Printf("s3 archive disabled (set LOG_VIEWER_S3_ENABLED=true to keep last %d days in S3)", archive.DefaultRetentionDays)
+	}
+
 	mux := http.NewServeMux()
 	adm.Routes(mux)
 	view.Routes(mux)
@@ -110,6 +129,9 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-stop
 	log.Printf("shutdown signal=%v", sig)
+	if collector != nil {
+		collector.Stop()
+	}
 	shutdownCtx, c := context.WithTimeout(context.Background(), 10*time.Second)
 	defer c()
 	_ = srv.Shutdown(shutdownCtx)

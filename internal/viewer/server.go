@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/archive"
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/auth"
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/config"
 	"github.com/Abdul-Rehman-DevOps/log-viewer/internal/k8s"
@@ -18,6 +19,7 @@ type Server struct {
 	Store    *config.Store
 	K8s      *k8s.Client
 	Sessions *auth.Sessions
+	Archive  *archive.Store // optional S3 history (nil = disabled)
 }
 
 func (s *Server) Routes(mux *http.ServeMux) {
@@ -31,6 +33,9 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/workloads", s.requireUser(s.handleWorkloads))
 	mux.HandleFunc("/api/unhealthy-pods", s.requireUser(s.handleUnhealthyPods))
 	mux.HandleFunc("/api/logs", s.requireUser(s.handleLogs))
+	mux.HandleFunc("/api/logs/history", s.requireUser(s.handleLogHistory))
+	mux.HandleFunc("/api/archive/status", s.requireUser(s.handleArchiveStatus))
+	mux.HandleFunc("/api/archive/workloads", s.requireUser(s.handleArchiveWorkloads))
 	mux.HandleFunc("/api/pods/containers", s.requireUser(s.handleContainers))
 }
 
@@ -149,7 +154,8 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"githubUrl":     cfg.GitHubURL,
 		"portfolioUrl":  cfg.PortfolioURL,
 		"repoUrl":       cfg.RepoURL,
-		"version":       "0.5.4",
+		"version":       "0.6.0",
+		"archive":       s.archiveStatus(),
 	}
 	if !needsSetup {
 		id := auth.CookieValue(r, auth.UserCookie)
@@ -325,6 +331,119 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		log.Printf("logs stream error ns=%s: %v", ns, err)
 	} else {
 		log.Printf("logs stream end ns=%s", ns)
+	}
+}
+
+func (s *Server) archiveStatus() archive.Status {
+	if s.Archive == nil {
+		return archive.Status{Enabled: false, RetentionDays: archive.DefaultRetentionDays}
+	}
+	return s.Archive.Status()
+}
+
+func (s *Server) handleArchiveStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.archiveStatus())
+}
+
+func (s *Server) handleArchiveWorkloads(w http.ResponseWriter, r *http.Request) {
+	if s.Archive == nil || !s.Archive.Config().Valid() {
+		writeJSON(w, http.StatusOK, map[string]any{"workloads": []any{}, "enabled": false})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cfg := s.Store.Get()
+	list, err := s.Archive.ListArchivedWorkloads(ctx)
+	if err != nil {
+		log.Printf("archive workloads: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]archive.ArchivedWorkload, 0, len(list))
+	for _, wl := range list {
+		if !config.NamespaceAllowed(cfg, wl.Namespace) {
+			continue
+		}
+		if !config.WorkloadAllowed(cfg, wl.Namespace, wl.Kind, wl.Name) {
+			continue
+		}
+		out = append(out, wl)
+	}
+	log.Printf("archive workloads: returned=%d", len(out))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"workloads":     out,
+		"enabled":       true,
+		"retentionDays": s.Archive.Config().RetentionDays,
+	})
+}
+
+func (s *Server) handleLogHistory(w http.ResponseWriter, r *http.Request) {
+	if s.Archive == nil || !s.Archive.Config().Valid() {
+		http.Error(w, `{"error":"s3_archive_disabled"}`, http.StatusServiceUnavailable)
+		return
+	}
+	ns := r.URL.Query().Get("namespace")
+	podsParam := r.URL.Query().Get("pods")
+	pod := r.URL.Query().Get("pod")
+	container := r.URL.Query().Get("container")
+	kind := r.URL.Query().Get("kind")
+	workload := r.URL.Query().Get("workload")
+	fromStr := r.URL.Query().Get("from")
+	toStr := r.URL.Query().Get("to")
+	if ns == "" || kind == "" || workload == "" {
+		http.Error(w, "namespace, kind, and workload required", http.StatusBadRequest)
+		return
+	}
+	from, err := time.Parse(time.RFC3339, fromStr)
+	if err != nil {
+		from, err = time.Parse(time.RFC3339Nano, fromStr)
+	}
+	if err != nil {
+		http.Error(w, "from must be RFC3339", http.StatusBadRequest)
+		return
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		to, err = time.Parse(time.RFC3339Nano, toStr)
+	}
+	if err != nil {
+		http.Error(w, "to must be RFC3339", http.StatusBadRequest)
+		return
+	}
+	cfg := s.Store.Get()
+	if !config.NamespaceAllowed(cfg, ns) || !config.WorkloadAllowed(cfg, ns, kind, workload) {
+		http.Error(w, "workload not allowed", http.StatusForbidden)
+		return
+	}
+	// Pods optional: empty / __all__ → discover from S3 (works after pod/Deployment delete).
+	var pods []string
+	switch {
+	case podsParam == "" && (pod == "" || pod == "__all__"):
+		pods = nil
+	case podsParam != "":
+		for _, p := range strings.Split(podsParam, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" && p != "__all__" {
+				pods = append(pods, p)
+			}
+		}
+	case pod != "" && pod != "__all__":
+		pods = []string{pod}
+	}
+
+	log.Printf("logs history ns=%s workload=%s/%s pods=%v from=%s to=%s", ns, kind, workload, pods, from.Format(time.RFC3339), to.Format(time.RFC3339))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	q := archive.QueryParams{
+		Namespace: ns, Kind: kind, Workload: workload,
+		Pods: pods, Container: container, From: from.UTC(), To: to.UTC(),
+	}
+	if err := s.Archive.StreamHistory(r.Context(), q, w); err != nil && r.Context().Err() == nil {
+		log.Printf("logs history error: %v", err)
 	}
 }
 

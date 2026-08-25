@@ -312,6 +312,39 @@ func (c *Client) streamOne(ctx context.Context, namespace, pod, container string
 	}
 }
 
+// FetchPodLogs returns a finite log snapshot (timestamps on) for archival.
+// Prefer sinceTime; otherwise sinceSeconds from now. tailLines caps volume (0 = API default).
+func (c *Client) FetchPodLogs(ctx context.Context, namespace, pod, container string, sinceTime *time.Time, sinceSeconds *int64, tailLines int64) ([]byte, error) {
+	opts := &corev1.PodLogOptions{
+		Follow:     false,
+		Timestamps: true,
+	}
+	if container != "" {
+		opts.Container = container
+	}
+	if sinceTime != nil && !sinceTime.IsZero() {
+		t := metav1.NewTime(sinceTime.UTC())
+		opts.SinceTime = &t
+	} else if sinceSeconds != nil && *sinceSeconds > 0 {
+		opts.SinceSeconds = sinceSeconds
+	}
+	if tailLines > 0 {
+		opts.TailLines = &tailLines
+	}
+	req := c.cs.CoreV1().Pods(namespace).GetLogs(pod, opts)
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("log fetch: %w", err)
+	}
+	defer stream.Close()
+	return io.ReadAll(stream)
+}
+
+// FormatLogLine converts leading RFC3339 timestamps to PKT and optionally prefixes the pod name.
+func FormatLogLine(raw []byte, pod string, withPod bool) []byte {
+	return formatLogLine(raw, pod, withPod)
+}
+
 var (
 	isoRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
 )
