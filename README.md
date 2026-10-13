@@ -1,5 +1,11 @@
 # Log Viewer
 
+[![CI](https://github.com/Abdul-Rehman-DevOps/log-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdul-Rehman-DevOps/log-viewer/actions/workflows/ci.yml)
+![Go](https://img.shields.io/github/go-mod/go-version/Abdul-Rehman-DevOps/log-viewer?logo=go)
+[![Docker](https://img.shields.io/docker/v/abdulrehman770/log-viewer?logo=docker&label=image&sort=semver)](https://hub.docker.com/r/abdulrehman770/log-viewer)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-native-326CE5?logo=kubernetes&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 **Version:** `0.5.4`  
 **Author:** [Abdul Rehman](https://abdulrehman.cz/)  
 **GitHub:** [Abdul-Rehman-DevOps](https://github.com/Abdul-Rehman-DevOps)  
@@ -159,7 +165,7 @@ Discovery is request-time against the API, constrained by Admin filters and Serv
 
 ## Local development
 
-Requires Go **1.22+** and cluster credentials.
+Requires Go **1.25+** and cluster credentials.
 
 ```bash
 export LOG_VIEWER_ADMIN_PASSWORD=devadmin

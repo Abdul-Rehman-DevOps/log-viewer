@@ -4,8 +4,8 @@
 /out/
 /tmp-data/
 *.exe
-log-viewer
-!cmd/log-viewer/
+/log-viewer
+_tmp_*.sh
 
 # Go
 /vendor/
